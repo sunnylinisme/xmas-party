@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, memo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, getDoc, deleteDoc, deleteField, increment } from 'firebase/firestore';
-import { Gift, Users, ArrowRight, Zap, Skull, Play, Edit3, AlertTriangle, LogIn, Share2, Link as LinkIcon, RotateCcw, Shuffle, Star, Save, X, LogOut, Info, CheckCircle, Clock, Bomb } from 'lucide-react';
+import { Gift, Users, ArrowRight, Zap, Skull, Play, Edit3, AlertTriangle, LogIn, Share2, Link as LinkIcon, RotateCcw, Shuffle, Star, Save, X, LogOut, Info, CheckCircle, Clock, Bomb, ChevronDown } from 'lucide-react';
 
 // ==========================================
 // ⚠️ 你的 Firebase 設定
@@ -77,6 +77,60 @@ const Toast = ({ message, onClose }) => {
       <div className="bg-slate-800 text-white px-6 py-3 rounded-full shadow-2xl border border-slate-600 flex items-center gap-2">
         <Info size={18} className="text-blue-400 shrink-0" />
         <span className="font-bold text-sm md:text-base">{message}</span>
+      </div>
+    </div>
+  );
+};
+
+// --- 輪盤元件 (Roulette) ---
+const RouletteWheel = ({ items, targetItem, isSpinning }) => {
+  const [rotation, setRotation] = useState(0);
+
+  useEffect(() => {
+    if (isSpinning && targetItem && items.length > 0) {
+      const targetIndex = items.indexOf(targetItem);
+      if (targetIndex === -1) return;
+
+      const segmentAngle = 360 / items.length;
+      const randomOffset = Math.random() * (segmentAngle * 0.8) - (segmentAngle * 0.4);
+      const targetRotation = 3600 + (360 - (targetIndex * segmentAngle)) + randomOffset;
+
+      setRotation(targetRotation);
+    }
+  }, [isSpinning, targetItem, items]);
+
+  const colors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7', '#ec4899', '#6366f1'];
+
+  return (
+    <div className="relative w-72 h-72 md:w-96 md:h-96 mx-auto my-8">
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-4 z-20">
+        <ChevronDown size={48} className="text-white drop-shadow-lg fill-white" />
+      </div>
+      <div
+        className="w-full h-full rounded-full border-4 border-slate-700 shadow-2xl relative overflow-hidden transition-transform duration-[5000ms] cubic-bezier(0.1, 0.7, 0.1, 1)"
+        style={{
+          transform: `rotate(${rotation}deg)`,
+          background: `conic-gradient(${items.map((_, i) => `${colors[i % colors.length]} ${i * (100 / items.length)}% ${(i + 1) * (100 / items.length)}%`).join(', ')
+            })`
+        }}
+      >
+        {items.map((item, i) => {
+          const angle = (360 / items.length) * i + (360 / items.length) / 2;
+          return (
+            <div
+              key={i}
+              className="absolute top-1/2 left-1/2 w-1/2 h-1 origin-left flex items-center"
+              style={{ transform: `rotate(${angle - 90}deg)` }}
+            >
+              <div className="pl-8 text-white font-bold text-sm md:text-base truncate w-32 md:w-40 text-shadow" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>
+                {item}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-slate-800 rounded-full border-4 border-slate-600 flex items-center justify-center shadow-xl z-10">
+        <Skull className="text-slate-400" />
       </div>
     </div>
   );
@@ -189,9 +243,8 @@ const App = () => {
   const [myGiftDescription, setMyGiftDescription] = useState('');
   const [myVotes, setMyVotes] = useState({}); // { targetUid: score }
 
-  // 抽獎動畫用
-  const [displayPunishment, setDisplayPunishment] = useState("🎲 準備抽出...");
-  const [isSpinning, setIsSpinning] = useState(false);
+  // 抽獎狀態
+  const [punishmentPool, setPunishmentPool] = useState([]);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -263,6 +316,13 @@ const App = () => {
           }
         }
 
+        // 初始化懲罰池 (給輪盤用)
+        if (data.phase === 'punishment-reveal' && (!punishmentPool || punishmentPool.length === 0)) {
+          let pool = Object.values(data.punishments || {});
+          if (pool.length === 0) pool = RANDOM_PUNISHMENTS;
+          setPunishmentPool(pool);
+        }
+
         // --- 自動流程 (由房主觸發) ---
         if (data.hostId === user.uid) {
           const participantCount = Object.keys(data.participants).length;
@@ -275,7 +335,7 @@ const App = () => {
             }
           }
 
-          // 2. 寫完規則 -> 寫懲罰 (NEW)
+          // 2. 寫完規則 -> 寫懲罰
           if (data.phase === 'rule-entry' && participantCount > 1) {
             const finishedRules = data.rules.filter(r => r.text && r.text.trim() !== "").length;
             if (finishedRules === participantCount) {
@@ -283,7 +343,7 @@ const App = () => {
             }
           }
 
-          // 3. 寫完懲罰 -> 遊戲開始 (NEW)
+          // 3. 寫完懲罰 -> 遊戲開始
           if (data.phase === 'punishment-entry' && participantCount > 1) {
             const finishedPunishments = Object.keys(data.punishments || {}).length;
             if (finishedPunishments === participantCount) {
@@ -298,17 +358,6 @@ const App = () => {
               nextPhase('countdown', data);
             }
           }
-        }
-
-        // 當進入 result (榜單) 頁面時，重置抽獎動畫狀態
-        if (data.phase === 'result') {
-          setIsSpinning(false);
-          setDisplayPunishment("🎲 準備抽出...");
-        }
-
-        // 如果資料庫已經有最終懲罰，直接顯示
-        if (data.finalPunishment) {
-          setDisplayPunishment(data.finalPunishment);
         }
 
       } else {
@@ -340,9 +389,7 @@ const App = () => {
       showToast("房間已清除 👋");
     } else {
       let updates = { participants: newParticipants };
-      if (roomData.hostId === user.uid) {
-        updates.hostId = Object.keys(newParticipants)[0];
-      }
+      // 房主離開不轉移權限
       await updateDoc(roomRef, updates);
     }
 
@@ -371,11 +418,13 @@ const App = () => {
           participants: { [user.uid]: safeUserName },
           gifts: {},
           rules: [],
-          punishments: {}, // 新增：懲罰池 {uid: text}
+          punishments: {},
           currentRuleIndex: 0,
           votingStatus: {},
           ratings: {},
+          finalResults: null, // 儲存快照結果
           finalPunishment: null,
+          isSpinning: false,
           createdAt: new Date().toISOString()
         });
       } else {
@@ -465,6 +514,21 @@ const App = () => {
       updates.matchDetails = details;
     }
 
+    // 進入結果畫面時，建立成績快照 (Snapshot)
+    if (nextPhaseName === 'result') {
+      const results = Object.keys(currentData.participants).map(uid => {
+        const details = currentData.matchDetails[uid] || { ratings: {} };
+        const totalScore = Object.values(details.ratings || {}).reduce((a, b) => a + b, 0);
+        return {
+          uid,
+          name: currentData.participants[uid],
+          giftName: currentData.gifts ? currentData.gifts[uid] : "神秘禮物",
+          totalScore
+        };
+      });
+      updates.finalResults = results;
+    }
+
     await updateRoom(updates);
   };
 
@@ -522,26 +586,16 @@ const App = () => {
 
   // 抽獎邏輯 (房主執行)
   const spinPunishment = async () => {
-    setIsSpinning(true);
-
-    // 從大家提交的懲罰中建立池子
+    // 1. 決定結果
     let pool = Object.values(roomData.punishments || {});
-    // 如果池子空的 (例外防呆)，用預設的
     if (pool.length === 0) pool = RANDOM_PUNISHMENTS;
+    const final = pool[Math.floor(Math.random() * pool.length)];
 
-    // 前端動畫效果 (假裝在跑)
-    let count = 0;
-    const interval = setInterval(() => {
-      setDisplayPunishment(pool[Math.floor(Math.random() * pool.length)]);
-      count++;
-      if (count > 20) { // 跑 20 次後停下
-        clearInterval(interval);
-        // 決定最終結果並寫入 DB
-        const final = pool[Math.floor(Math.random() * pool.length)];
-        updateRoom({ finalPunishment: final });
-        setIsSpinning(false);
-      }
-    }, 100);
+    // 2. 寫入 DB，觸發所有人的動畫
+    await updateRoom({
+      finalPunishment: final,
+      isSpinning: true // 告訴前端開始轉
+    });
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center bg-slate-900 text-white">載入中...</div>;
@@ -735,7 +789,7 @@ const App = () => {
           </div>
         )}
 
-        {/* --- 階段 2.5: 撰寫懲罰 (Punishment Entry) - NEW --- */}
+        {/* --- 階段 2.5: 撰寫懲罰 (Punishment Entry) --- */}
         {roomData.phase === 'punishment-entry' && (
           <div className="animate-fade-in space-y-8">
             <Card>
@@ -875,6 +929,11 @@ const App = () => {
         {/* --- 階段 6: 最終結果 (Leaderboard) --- */}
         {roomData.phase === 'result' && (
           <div className="animate-fade-in space-y-8 pb-20">
+            {/* 跑馬燈預告 */}
+            <div className="bg-yellow-500/20 text-yellow-300 py-2 text-center text-sm font-bold border-y border-yellow-500/30 animate-pulse">
+              ⚠️ 下一階段：命運大輪盤！準備抽出懲罰...
+            </div>
+
             <div className="text-center mb-10">
               <h2 className="text-5xl font-black text-yellow-400 drop-shadow-xl mb-3 flex items-center justify-center gap-3">
                 <Star fill="currentColor" size={40} /> 本日最雷王誕生 <Star fill="currentColor" size={40} />
@@ -882,16 +941,8 @@ const App = () => {
               <p className="text-slate-400 text-lg">恭喜以下得主獲得大家的怨念</p>
             </div>
 
-            {participantList.map(([uid]) => {
-              const userRatings = roomData.ratings ? roomData.ratings[uid] : {};
-              const totalScore = Object.values(userRatings || {}).reduce((a, b) => a + b, 0);
-              return {
-                uid,
-                totalScore,
-                name: roomData.participants[uid],
-                giftName: roomData.gifts ? roomData.gifts[uid] : "神秘禮物"
-              };
-            }).sort((a, b) => b.totalScore - a.totalScore).slice(0, 3).map((item, idx) => (
+            {/* 使用 Snapshot 資料 (finalResults) 渲染 */}
+            {(roomData.finalResults || []).sort((a, b) => b.totalScore - a.totalScore).slice(0, 3).map((item, idx) => (
               <div key={item.uid} className={`relative rounded-3xl p-6 shadow-xl flex items-center gap-5 border ${idx === 0 ? 'bg-gradient-to-r from-yellow-900/80 to-slate-900 border-yellow-500 transform scale-105 z-10' : 'bg-slate-800/80 border-slate-700'}`}>
                 {idx === 0 && <div className="absolute -top-4 -right-3 text-5xl animate-bounce">👑</div>}
                 <div className={`w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-2xl shrink-0 ${idx === 0 ? 'bg-yellow-500 shadow-lg shadow-yellow-500/50' : idx === 1 ? 'bg-slate-500' : 'bg-amber-700'}`}>#{idx + 1}</div>
@@ -916,17 +967,13 @@ const App = () => {
           </div>
         )}
 
-        {/* --- 階段 7: 懲罰揭曉 (Punishment Reveal) - NEW --- */}
+        {/* --- 階段 7: 懲罰揭曉 (Punishment Reveal) --- */}
         {roomData.phase === 'punishment-reveal' && (
           <div className="animate-fade-in space-y-8 pb-20 flex flex-col h-full">
             {/* 置頂：雷王資訊 */}
             {(() => {
-              // 找出最高分
-              const loser = participantList.map(([uid]) => {
-                const userRatings = roomData.ratings ? roomData.ratings[uid] : {};
-                const totalScore = Object.values(userRatings || {}).reduce((a, b) => a + b, 0);
-                return { uid, totalScore, name: roomData.participants[uid] };
-              }).sort((a, b) => b.totalScore - a.totalScore)[0];
+              const loser = (roomData.finalResults || []).sort((a, b) => b.totalScore - a.totalScore)[0];
+              if (!loser) return null;
 
               return (
                 <div className="text-center py-6 border-b border-white/10 bg-black/20">
@@ -940,18 +987,30 @@ const App = () => {
             })()}
 
             <div className="flex-1 flex flex-col items-center justify-center p-4">
-              <h3 className="text-2xl font-bold text-white mb-8 flex items-center gap-3">
-                <Skull size={32} className="text-slate-400" /> 命運的懲罰 <Skull size={32} className="text-slate-400" />
+              <h3 className="text-2xl font-bold text-white mb-4 flex items-center gap-3">
+                <Skull size={32} className="text-slate-400" /> 命運大輪盤 <Skull size={32} className="text-slate-400" />
               </h3>
 
-              <div className={`text-4xl md:text-5xl font-black text-center leading-tight bg-slate-900 border-2 ${isSpinning ? 'border-yellow-500 text-yellow-400 animate-pulse' : 'border-red-600 text-white'} p-10 rounded-3xl shadow-2xl max-w-lg w-full min-h-[200px] flex items-center justify-center transition-all duration-300`}>
-                {displayPunishment}
-              </div>
+              <RouletteWheel
+                items={punishmentPool}
+                targetItem={roomData.finalPunishment}
+                isSpinning={roomData.isSpinning}
+              />
+
+              {/* 最終結果顯示 (動畫結束後才清楚顯示文字) */}
+              {roomData.finalPunishment && (
+                <div className="mt-8 text-center animate-fade-in delay-1000">
+                  <p className="text-slate-400 text-sm mb-2">懲罰內容</p>
+                  <div className="text-3xl font-black text-yellow-400 bg-slate-900/80 px-6 py-4 rounded-xl border border-yellow-500/50 max-w-sm mx-auto">
+                    {roomData.finalPunishment}
+                  </div>
+                </div>
+              )}
 
               {isHost && (
-                <div className="mt-12 w-full max-w-xs space-y-4">
-                  <Button variant="neutral" size="lg" onClick={spinPunishment} className="w-full text-xl py-5" disabled={isSpinning}>
-                    {isSpinning ? "抽選中..." : "🎲 抽取懲罰"}
+                <div className="mt-8 w-full max-w-xs space-y-4">
+                  <Button variant="neutral" size="lg" onClick={spinPunishment} className="w-full text-xl py-5" disabled={roomData.isSpinning}>
+                    {roomData.isSpinning ? "抽選中..." : "🎲 啟動輪盤"}
                   </Button>
 
                   <Button variant="secondary" onClick={leaveRoom} className="w-full bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white mt-8">
@@ -960,8 +1019,8 @@ const App = () => {
                 </div>
               )}
 
-              {!isHost && (
-                <div className="mt-12 text-slate-500">等待抽出懲罰...</div>
+              {!isHost && !roomData.finalPunishment && (
+                <div className="mt-12 text-slate-500">等待房主啟動輪盤...</div>
               )}
             </div>
           </div>
