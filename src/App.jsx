@@ -61,7 +61,7 @@ const Toast = ({ message, onClose }) => {
   }, [onClose]);
 
   return (
-    <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[100] animate-fade-in-down w-max max-w-[90%]">
+    <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[100] animate-fade-in-down w-max max-w-[90%] pointer-events-none">
       <div className="bg-slate-800 text-white px-6 py-3 rounded-full shadow-2xl border border-slate-600 flex items-center gap-2">
         <Info size={18} className="text-blue-400 shrink-0" />
         <span className="font-bold text-sm md:text-base">{message}</span>
@@ -138,13 +138,13 @@ const Button = ({ onClick, children, variant = 'primary', className = "", disabl
   );
 };
 
-// --- 子元件：投票卡片 (重構：隱藏總分版) ---
+// --- 子元件：投票卡片 ---
 const VotingItem = ({ receiverUid, receiverName, roomData, vote, submitGiftDescription, currentUserId }) => {
   const giverUid = roomData.resultMapping[receiverUid];
   const giverName = roomData.participants[giverUid] || "未知";
   const details = roomData.matchDetails[receiverUid] || { giftName: '', ratings: {} };
 
-  // 取得評分資料 (但不加總顯示，只顯示自己的)
+  // 取得評分資料
   const ratings = details.ratings || {};
 
   // 我的評分 (如果還沒評過，預設 1 分)
@@ -195,7 +195,7 @@ const VotingItem = ({ receiverUid, receiverName, roomData, vote, submitGiftDescr
         </button>
       </div>
 
-      {/* 個人評分區 (這個才是重點) */}
+      {/* 個人評分區 */}
       <div className="bg-slate-950/40 p-3 rounded-xl">
         <div className="flex justify-between items-center mb-2">
           <span className="text-sm text-slate-400 flex items-center gap-1"><Star size={14} className="text-yellow-500" /> 你的評分</span>
@@ -218,7 +218,7 @@ const App = () => {
   const [roomData, setRoomData] = useState(null);
   const [isInRoom, setIsInRoom] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState(null); // Toast state
+  const [toast, setToast] = useState(null);
 
   // 本地輸入狀態
   const [myRuleInput, setMyRuleInput] = useState('');
@@ -279,12 +279,10 @@ const App = () => {
         const data = docSnap.data();
         setRoomData(data);
 
-        // 檢查是否加入
         if (data.participants && data.participants[user.uid]) {
           setIsInRoom(true);
           setUserName(data.participants[user.uid]);
 
-          // 還原規則輸入
           if (data.phase === 'rule-entry') {
             const myRule = data.rules.find(r => r.uid === user.uid);
             if (myRule && myRule.text) setMyRuleInput(myRule.text);
@@ -295,16 +293,15 @@ const App = () => {
         if (data.hostId === user.uid) {
           const participantCount = Object.keys(data.participants).length;
 
-          // 1. 自動進入遊戲：所有人規則都寫了
+          // 1. 自動進入遊戲
           if (data.phase === 'rule-entry' && participantCount > 1) {
             const finishedRules = data.rules.filter(r => r.text && r.text.trim() !== "").length;
             if (finishedRules === participantCount) {
-              // 自動進下一關
               nextPhase('game-playing', data);
             }
           }
 
-          // 2. 自動進入投票：所有人回報完畢
+          // 2. 自動進入投票
           if (data.phase === 'result-entry' && participantCount > 1) {
             const reportedCount = Object.keys(data.resultMapping || {}).length;
             if (reportedCount === participantCount) {
@@ -337,16 +334,13 @@ const App = () => {
     const newParticipants = { ...roomData.participants };
     delete newParticipants[user.uid];
 
-    // 檢查是否為最後一人
     if (Object.keys(newParticipants).length === 0) {
-      // 清除房間
       await deleteDoc(roomRef);
       showToast("房間已清除 👋");
     } else {
-      // 更新名單，如果是房主離開，轉移權限
       let updates = { participants: newParticipants };
       if (roomData.hostId === user.uid) {
-        updates.hostId = Object.keys(newParticipants)[0]; // 轉給下一個人
+        updates.hostId = Object.keys(newParticipants)[0];
       }
       await updateDoc(roomRef, updates);
     }
@@ -409,7 +403,7 @@ const App = () => {
       document.execCommand('copy');
       showToast("✅ 邀請已複製！");
     } catch (err) {
-      alert(`請複製：\n\n${inviteText}`);
+      showToast("複製失敗，請手動複製");
     }
     document.body.removeChild(textArea);
   };
@@ -425,7 +419,6 @@ const App = () => {
     setMyRuleInput(random);
   };
 
-  // 修改 nextPhase 以支援傳入 data (用於自動流程)
   const nextPhase = async (nextPhaseName, currentData = roomData) => {
     if (!currentData) return;
     let updates = { phase: nextPhaseName };
@@ -457,7 +450,6 @@ const App = () => {
     if (nextPhaseName === 'voting') {
       const details = {};
       Object.keys(currentData.participants).forEach(uid => {
-        // 初始化評分物件 ratings: {}
         details[uid] = { giftName: '', ratings: {} };
       });
       updates.matchDetails = details;
@@ -495,19 +487,11 @@ const App = () => {
     showToast("儲存成功");
   };
 
-  // 個人評分邏輯
   const vote = async (targetUid, delta) => {
     const currentDetails = roomData.matchDetails[targetUid] || {};
     const currentRatings = currentDetails.ratings || {};
-
-    // 取得我原本的分數，預設 1
     const myCurrentScore = currentRatings[user.uid] || 1;
-    let newScore = myCurrentScore + delta;
-
-    // 限制 1~10 分
-    newScore = Math.max(1, Math.min(10, newScore));
-
-    // 更新 Firestore 中我的那一筆分數
+    let newScore = Math.max(1, Math.min(10, myCurrentScore + delta));
     await updateRoom({ [`matchDetails.${targetUid}.ratings.${user.uid}`]: newScore });
   };
 
@@ -523,7 +507,6 @@ const App = () => {
 
   if (loading) return <div className="h-screen flex items-center justify-center bg-slate-900 text-white">載入中...</div>;
 
-  // 1. 登入/大廳頁面
   if (!isInRoom) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6 flex items-center justify-center relative overflow-hidden">
@@ -576,7 +559,6 @@ const App = () => {
     );
   }
 
-  // 2. 遊戲房間內
   if (!roomData) return <div className="h-screen flex items-center justify-center bg-slate-900 text-white">讀取房間資料中...</div>;
 
   const isHost = user.uid === roomData.hostId;
@@ -587,7 +569,6 @@ const App = () => {
       <SnowBackground />
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
 
-      {/* 頂部資訊列 */}
       <div className="bg-slate-900/90 backdrop-blur-md border-b border-white/5 sticky top-0 z-50 shadow-lg p-4">
         <div className="flex justify-between items-center mb-3">
           <div className="flex items-center gap-3">
@@ -642,7 +623,6 @@ const App = () => {
           </div>
         )}
 
-        {/* --- 階段 2: 撰寫規則 --- */}
         {roomData.phase === 'rule-entry' && (
           <div className="animate-fade-in space-y-8">
             <Card>
@@ -678,7 +658,6 @@ const App = () => {
           </div>
         )}
 
-        {/* --- 階段 3: 遊戲進行 --- */}
         {roomData.phase === 'game-playing' && (
           <div className="animate-fade-in py-10 flex flex-col items-center">
             <div className="text-slate-400 mb-8 text-center w-full">
@@ -713,7 +692,6 @@ const App = () => {
           </div>
         )}
 
-        {/* --- 階段 4: 結果回報 --- */}
         {roomData.phase === 'result-entry' && (
           <div className="animate-fade-in space-y-8">
             <Card className="border-t-4 border-t-blue-500 py-10">
@@ -746,7 +724,6 @@ const App = () => {
           </div>
         )}
 
-        {/* --- 階段 5: 投票審判 (使用新的子元件) --- */}
         {roomData.phase === 'voting' && (
           <div className="animate-fade-in space-y-6 pb-20">
             <div className="bg-yellow-500/10 border border-yellow-500/30 p-5 rounded-2xl flex gap-4 items-start mb-6">
@@ -777,7 +754,6 @@ const App = () => {
           </div>
         )}
 
-        {/* --- 階段 6: 最終結果 --- */}
         {roomData.phase === 'result' && (
           <div className="animate-fade-in space-y-8 pb-20">
             <div className="text-center mb-10">
@@ -821,7 +797,7 @@ const App = () => {
 
             <div className="text-center mt-12">
               <Button variant="secondary" onClick={leaveRoom} className="bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white px-10">
-                <LogOut size={20} /> 離開房間
+                <LogOut size={20} /> 離開並清除房間 (最後一人)
               </Button>
             </div>
           </div>
