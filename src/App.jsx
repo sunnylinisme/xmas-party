@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, memo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, getDoc, deleteDoc, deleteField, increment } from 'firebase/firestore';
-import { Gift, Users, ArrowRight, Zap, Skull, Play, Edit3, AlertTriangle, LogIn, Share2, Link as LinkIcon, RotateCcw, Shuffle, Star, Save, X, LogOut, Info, CheckCircle, Clock, Bomb, ChevronDown } from 'lucide-react';
+import { Gift, Users, ArrowRight, Zap, Skull, Play, Edit3, AlertTriangle, LogIn, Share2, Link as LinkIcon, RotateCcw, Shuffle, Star, Save, X, LogOut, Info, CheckCircle, Clock, Bomb, ChevronDown, Hash, Lightbulb } from 'lucide-react';
 
 // ==========================================
 // ⚠️ 你的 Firebase 設定
@@ -23,23 +23,20 @@ const app = isConfigured ? initializeApp(firebaseConfig) : null;
 const auth = isConfigured ? getAuth(app) : null;
 const db = isConfigured ? getFirestore(app) : null;
 
-// --- 隨機規則庫 ---
+// --- 隨機規則庫 (邏輯型) ---
 const RANDOM_RULES = [
-  "跟你的右手邊第二個人交換",
-  "跟現場戴眼鏡的人交換（如果多個就猜拳）",
-  "跟現場頭髮最長的人交換",
-  "持有紅色物品的人互相交換",
-  "跟正對面的人交換",
-  "所有禮物往左傳一格",
-  "所有禮物往右傳三格",
-  "跟現場年紀最小的人交換",
-  "跟主持人交換",
-  "把禮物拋向空中，搶到哪個算哪個（注意安全！）",
-  "跟現場穿白色衣服的人交換",
-  "猜拳！贏的人可以指定跟任何人換",
-  "這回合不交換，大家休息一下",
-  "跟現場看起來最貴的禮物交換",
-  "拿著禮物深蹲 10 下，然後跟左邊的人換"
+  "所有人將禮物傳給「號碼 +1」的人 (循環)",
+  "所有人將禮物傳給「號碼 -1」的人 (循環)",
+  "所有人將禮物傳給「號碼 +2」的人 (循環)",
+  "號碼是「單數」的人，起立向右移動兩個位置",
+  "號碼是「雙數」的人，跟你的右手邊交換禮物",
+  "號碼 1 號指定兩個人互換禮物",
+  "號碼最大的跟號碼最小的互換禮物",
+  "所有人按照號碼順序排成一圈，然後同時往右傳",
+  "號碼是 3 的倍數的人，跟主持人交換",
+  "所有人將禮物傳給「號碼 -2」的人 (循環)",
+  "拿著禮物跟「號碼 +3」的人交換 (循環)",
+  "跟你的右手邊第二個人交換"
 ];
 
 // --- 隨機懲罰庫 ---
@@ -65,6 +62,44 @@ const getRatingLabel = (score) => {
   return { text: "☠️ 恭喜! 超~級~雷~", color: "text-red-500 font-black animate-pulse" };
 };
 
+// --- 解析規則並產生提示的 Helper ---
+const calculateHint = (ruleText, myNum, allParticipants) => {
+  if (!ruleText || !myNum || !allParticipants) return null;
+
+  // 取得所有存在的號碼並排序 (1, 2, 3...)
+  const numbers = Object.values(allParticipants).sort((a, b) => a - b);
+  const myIndex = numbers.indexOf(myNum);
+  const count = numbers.length;
+  if (myIndex === -1) return null;
+
+  let targetNum = null;
+
+  // 解析 +N 邏輯
+  const plusMatch = ruleText.match(/號碼\s*\+(\d+)/);
+  if (plusMatch) {
+    const offset = parseInt(plusMatch[1]);
+    const targetIndex = (myIndex + offset) % count;
+    targetNum = numbers[targetIndex];
+  }
+
+  // 解析 -N 邏輯
+  const minusMatch = ruleText.match(/號碼\s*\-(\d+)/);
+  if (minusMatch) {
+    const offset = parseInt(minusMatch[1]);
+    const targetIndex = (myIndex - offset + count * 10) % count; // 加多一點 count 避免負數
+    targetNum = numbers[targetIndex];
+  }
+
+  if (targetNum !== null) {
+    const targetEntry = Object.entries(allParticipants).find(([uid, num]) => num === targetNum);
+    if (targetEntry) {
+      return { num: targetNum, uid: targetEntry[0] };
+    }
+  }
+
+  return null;
+};
+
 // --- Toast 通知元件 ---
 const Toast = ({ message, onClose }) => {
   useEffect(() => {
@@ -82,7 +117,7 @@ const Toast = ({ message, onClose }) => {
   );
 };
 
-// --- 輪盤元件 (Roulette) - 修正版 ---
+// --- 輪盤元件 (Roulette) ---
 const RouletteWheel = ({ items, targetItem, isSpinning, className }) => {
   const [rotation, setRotation] = useState(0);
 
@@ -92,15 +127,8 @@ const RouletteWheel = ({ items, targetItem, isSpinning, className }) => {
       if (targetIndex === -1) return;
 
       const segmentAngle = 360 / items.length;
-
-      // 計算目標中心點的角度 (以0度為起點)
-      // 逆時針旋轉角度
       const centerAngle = (targetIndex * segmentAngle) + (segmentAngle / 2);
-
-      // 基礎旋轉：多轉10圈 + 對齊角度
       const baseRotation = 3600 + (360 - centerAngle);
-
-      // 隨機偏移 (區塊內 +/- 40%)
       const randomOffset = (Math.random() - 0.5) * (segmentAngle * 0.8);
 
       setRotation(baseRotation + randomOffset);
@@ -111,7 +139,6 @@ const RouletteWheel = ({ items, targetItem, isSpinning, className }) => {
 
   return (
     <div className={`relative w-64 h-64 md:w-80 md:h-80 mx-auto ${className}`}>
-      {/* 指針 (固定在上方) */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-3 z-20 filter drop-shadow-lg">
         <ChevronDown size={40} className="text-white fill-white stroke-[3px] stroke-slate-900" />
       </div>
@@ -256,6 +283,12 @@ const App = () => {
   // 抽獎狀態
   const [punishmentPool, setPunishmentPool] = useState([]);
 
+  // 我的號碼
+  const myNumber = roomData?.participantNumbers?.[user?.uid];
+
+  // 自動提示
+  const [currentHint, setCurrentHint] = useState(null);
+
   const showToast = (msg) => {
     setToast(msg);
   };
@@ -326,7 +359,23 @@ const App = () => {
           }
         }
 
-        // 初始化懲罰池 (給輪盤用)
+        // 計算提示 (遊戲階段)
+        if (data.phase === 'game-playing' && data.participantNumbers && data.participantNumbers[user.uid]) {
+          const rule = data.rules[data.currentRuleIndex];
+          if (rule && rule.text) {
+            const hint = calculateHint(rule.text, data.participantNumbers[user.uid], data.participantNumbers);
+            if (hint) {
+              const targetName = data.participants[hint.uid];
+              setCurrentHint(`你的目標是：${hint.num} 號 (${targetName})`);
+            } else {
+              setCurrentHint(null);
+            }
+          }
+        } else {
+          setCurrentHint(null);
+        }
+
+        // 初始化懲罰池
         if (data.phase === 'punishment-reveal' && (!punishmentPool || punishmentPool.length === 0)) {
           let pool = Object.values(data.punishments || {});
           if (pool.length === 0) pool = RANDOM_PUNISHMENTS;
@@ -337,7 +386,7 @@ const App = () => {
         if (data.hostId === user.uid) {
           const participantCount = Object.keys(data.participants).length;
 
-          // 1. 禮物登錄完 -> 寫規則
+          // 1. 禮物登錄完 -> 寫規則 (順便分發隨機號碼)
           if (data.phase === 'gift-entry' && participantCount > 1) {
             const finishedGifts = Object.keys(data.gifts || {}).length;
             if (finishedGifts === participantCount) {
@@ -399,7 +448,6 @@ const App = () => {
       showToast("房間已清除 👋");
     } else {
       let updates = { participants: newParticipants };
-      // 主持人離開不轉移權限 (維持原主持人ID，即便他不在，避免權限亂跑)
       await updateDoc(roomRef, updates);
     }
 
@@ -490,9 +538,28 @@ const App = () => {
     if (!currentData) return;
     let updates = { phase: nextPhaseName };
 
-    // 進入規則階段初始化
-    if (nextPhaseName === 'rule-entry') {
+    // --- 關鍵修正：在進入 'rule-entry' (也就是遊戲正式開始前) 分配隨機號碼 ---
+    if (nextPhaseName === 'rule-entry' && currentData.phase === 'gift-entry') {
       const pIds = Object.keys(currentData.participants);
+      const count = pIds.length;
+
+      // 1. 產生 1~N 的數列
+      const numbers = Array.from({ length: count }, (_, i) => i + 1);
+
+      // 2. Fisher-Yates 洗牌
+      for (let i = numbers.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [numbers[i], numbers[j]] = [numbers[j], numbers[i]];
+      }
+
+      // 3. 分配給每個 UID
+      const assignedNumbers = {};
+      pIds.forEach((uid, index) => {
+        assignedNumbers[uid] = numbers[index];
+      });
+      updates.participantNumbers = assignedNumbers;
+
+      // 初始化規則陣列
       const initialRules = pIds.map(uid => ({
         uid,
         authorName: currentData.participants[uid],
@@ -501,7 +568,7 @@ const App = () => {
       updates.rules = initialRules;
     }
 
-    // 進入遊戲階段初始化 (洗牌)
+    // 進入遊戲階段初始化 (洗牌規則)
     if (nextPhaseName === 'game-playing') {
       const shuffled = [...currentData.rules];
       for (let i = shuffled.length - 1; i > 0; i--) {
@@ -682,7 +749,11 @@ const App = () => {
         <div className="flex justify-between items-center mb-3">
           <div className="flex items-center gap-3">
             <div className="bg-purple-600 px-3 py-1.5 rounded-full text-sm font-bold shadow-lg shadow-purple-500/30">Room {roomId}</div>
-            <span className="font-bold truncate max-w-[140px] text-slate-200 text-lg">{userName}</span>
+            <div className="flex flex-col">
+              <span className="font-bold truncate max-w-[140px] text-slate-200 text-lg leading-none mb-0.5">{userName}</span>
+              {/* 顯示我的號碼 */}
+              {myNumber && <span className="text-xs text-yellow-400 font-bold flex items-center gap-0.5"><Hash size={10} /> 你是 {myNumber} 號</span>}
+            </div>
           </div>
           <div className="text-sm text-slate-400 flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-full">
             <Users size={16} /> {participantList.length}
@@ -736,6 +807,17 @@ const App = () => {
         {/* --- 階段 1.5: 禮物登錄 (Gift Entry) --- */}
         {roomData.phase === 'gift-entry' && (
           <div className="animate-fade-in space-y-8">
+            {/* 顯示我的號碼卡片 */}
+            {myNumber && (
+              <div className="bg-yellow-500/20 border border-yellow-500/50 p-6 rounded-2xl text-center shadow-lg animate-fade-in-up">
+                <p className="text-yellow-200 text-sm mb-1 uppercase tracking-widest">Your Number</p>
+                <div className="text-5xl font-black text-yellow-400 flex items-center justify-center gap-2">
+                  <Hash size={40} /> {myNumber}
+                </div>
+                <p className="text-xs text-yellow-200/70 mt-2">請記住你的代號，等一下交換會用到！</p>
+              </div>
+            )}
+
             <Card>
               <h2 className="text-2xl font-bold text-center mb-2 flex items-center justify-center gap-2">
                 <Gift className="text-pink-400" size={28} /> 你的禮物是？
@@ -775,7 +857,7 @@ const App = () => {
               <div className="mb-6">
                 <textarea
                   className="w-full p-5 bg-slate-800/50 border border-slate-600 rounded-2xl focus:border-purple-500 outline-none resize-none text-xl text-white placeholder-slate-600 min-h-[160px]"
-                  placeholder="例：跟左手邊第三個人交換..."
+                  placeholder="例：所有人往右傳給 +1 號..."
                   value={myRuleInput}
                   onChange={e => setMyRuleInput(e.target.value)}
                   disabled={roomData.rules.find(r => r.uid === user.uid)?.text !== ""}
@@ -848,6 +930,16 @@ const App = () => {
               </div>
             </div>
 
+            {/* 自動提示 (Smart Hint) */}
+            {currentHint && (
+              <div className="mb-6 animate-fade-in-up w-full">
+                <div className="bg-blue-500/20 border border-blue-500/50 text-blue-200 px-6 py-4 rounded-xl text-center shadow-lg backdrop-blur-sm flex items-center justify-center gap-2">
+                  <Lightbulb className="text-yellow-400 shrink-0 animate-pulse" size={24} />
+                  <span className="font-bold text-lg">{currentHint}</span>
+                </div>
+              </div>
+            )}
+
             <Card className="w-full text-center py-20 transform transition-all duration-500 hover:scale-[1.02] border-t-4 border-t-purple-500 relative overflow-hidden group">
               <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-purple-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
               <div className="mb-8">
@@ -896,7 +988,7 @@ const App = () => {
                 {participantList.map(([targetUid, targetName]) => {
                   if (targetUid === user.uid) return null; // 不用評自己
                   const giftName = roomData.gifts ? roomData.gifts[targetUid] : "神秘禮物";
-                  const myScore = myVotes[targetUid] || 1;
+                  const myScore = myVotes[targetUid] || 1; // 預設 1
 
                   return (
                     <Card key={targetUid} className="p-5 border border-white/5 relative overflow-hidden mb-4">
