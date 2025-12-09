@@ -79,7 +79,7 @@ const Toast = ({ message, onClose }) => {
   );
 };
 
-// --- 輪盤元件 (Roulette) - 修正：移除隨機偏移，確保同步 ---
+// --- 輪盤元件 (Roulette) - 修正：同步版 ---
 const RouletteWheel = ({ items, targetItem, isSpinning, className }) => {
   const [rotation, setRotation] = useState(0);
 
@@ -94,7 +94,6 @@ const RouletteWheel = ({ items, targetItem, isSpinning, className }) => {
       const centerAngle = (targetIndex * segmentAngle) + (segmentAngle / 2);
 
       // 基礎旋轉：多轉10圈 + 對齊角度
-      // ⚠️ 移除 Math.random() 偏移，確保所有裝置指針位置完全一致
       const baseRotation = 3600 + (360 - centerAngle);
 
       setRotation(baseRotation);
@@ -261,11 +260,11 @@ const App = () => {
   };
 
   // 🔒 確保懲罰池在所有客戶端排序一致 (Memoized & Sorted)
+  // 修正：使用預設 sort() (ASCII) 確保跨平台排序一致性，避免 localeCompare 的差異
   const punishmentPool = useMemo(() => {
     const punishments = roomData?.punishments ? Object.values(roomData.punishments) : [];
-    if (punishments.length === 0) return RANDOM_PUNISHMENTS.sort((a, b) => a.localeCompare(b));
-    // ⚠️ 關鍵修正：使用 localeCompare 確保中文字串排序在所有裝置一致
-    return punishments.sort((a, b) => a.localeCompare(b));
+    if (punishments.length === 0) return [...RANDOM_PUNISHMENTS].sort();
+    return punishments.sort();
   }, [roomData?.punishments]);
 
   if (!isConfigured) {
@@ -333,6 +332,33 @@ const App = () => {
           }
         }
 
+        // 處理抽獎動畫 (只在第一次開獎時執行)
+        if (data.isSpinning && !showFinalResult) {
+          setShowFinalResult(false);
+          const interval = setInterval(() => {
+            // 使用 punishmentPool 確保文字跳動內容也一致
+            // 這裡我們重新計算 pool 因為無法直接從 hook 外部拿 useMemo 的值
+            let p = data.punishments ? Object.values(data.punishments) : RANDOM_PUNISHMENTS;
+            setRandomText(p[Math.floor(Math.random() * p.length)]);
+          }, 100);
+
+          const timeout = setTimeout(() => {
+            clearInterval(interval);
+            setShowFinalResult(true);
+          }, 5000);
+
+          return () => {
+            clearInterval(interval);
+            clearTimeout(timeout);
+          }
+        }
+
+        // 如果已經有結果且 spinning 為 true (後進來的人)，直接顯示結果
+        if (data.finalPunishment && data.isSpinning && !showFinalResult) {
+          setShowFinalResult(true);
+          hasTriggeredAnimation.current = true;
+        }
+
         // --- 自動流程 (由主持人觸發) ---
         if (data.hostId === user.uid) {
           const participantCount = Object.keys(data.participants).length;
@@ -365,47 +391,21 @@ const App = () => {
     return () => unsubscribe();
   }, [user, roomId]);
 
-  // 修正：抽獎動畫邏輯獨立出來，不放在 onSnapshot 裡
-  // 依賴 finalPunishment 與 isSpinning 的變化，而不是 roomData 的所有變化
+  // 修正：抽獎動畫邏輯獨立出來
   useEffect(() => {
     if (!roomData) return;
 
-    // 如果正在轉動且尚未觸發過動畫 -> 開始動畫
     if (roomData.isSpinning && !hasTriggeredAnimation.current) {
-      hasTriggeredAnimation.current = true; // 鎖定
+      hasTriggeredAnimation.current = true;
       setShowFinalResult(false);
-
-      // 文字跳動效果
-      const interval = setInterval(() => {
-        let pool = roomData.punishments ? Object.values(roomData.punishments) : RANDOM_PUNISHMENTS;
-        setRandomText(pool[Math.floor(Math.random() * pool.length)]);
-      }, 100);
-
-      // 5秒後停止動畫並顯示結果
-      const timeout = setTimeout(() => {
-        clearInterval(interval);
-        setShowFinalResult(true);
-      }, 5000);
-
-      return () => {
-        clearInterval(interval);
-        clearTimeout(timeout);
-      }
+      // 動畫由上面的 onSnapshot 觸發，這裡主要是鎖定狀態
     }
 
-    // 如果一進來就已經有結果了 (例如中途加入或重整)，直接顯示
-    if (!roomData.isSpinning && roomData.finalPunishment && !showFinalResult) {
-      setShowFinalResult(true);
-      hasTriggeredAnimation.current = true; // 視為已播放
-    }
-
-    // 如果重置了 (例如房主重抽)，解鎖
     if (!roomData.isSpinning && !roomData.finalPunishment) {
       hasTriggeredAnimation.current = false;
       setShowFinalResult(false);
       setRandomText("🎲 準備抽出...");
     }
-
   }, [roomData?.isSpinning, roomData?.finalPunishment]);
 
 
@@ -431,7 +431,6 @@ const App = () => {
       showToast("房間已清除 👋");
     } else {
       let updates = { participants: newParticipants };
-      // 主持人離開不轉移權限
       await updateDoc(roomRef, updates);
     }
 
@@ -640,10 +639,12 @@ const App = () => {
 
   // 抽獎邏輯 (主持人執行)
   const spinPunishment = async () => {
+    // 1. 使用跟前端 useMemo 一致的排序邏輯取得清單
+    // 這裡直接使用 punishmentPool (前端已排序) 傳過去其實最穩，但為了不依賴前端狀態，我們在送出前再 sort 一次
     let pool = Object.values(roomData.punishments || {});
     if (pool.length === 0) pool = RANDOM_PUNISHMENTS;
-    // ⚠️ 關鍵：後端也要排序，確保 index 對應正確
-    pool.sort((a, b) => a.localeCompare(b));
+    // ⚠️ 關鍵：強制排序，確保與前端顯示順序一致
+    pool.sort();
 
     const final = pool[Math.floor(Math.random() * pool.length)];
 
@@ -723,29 +724,36 @@ const App = () => {
       )}
 
       {/* 頂部資訊列 (現在全頁面顯示) */}
-      <div className="bg-slate-900/90 backdrop-blur-md border-b border-white/5 sticky top-0 z-50 shadow-lg p-4">
-        <div className="flex justify-between items-center mb-3">
-          <div className="flex items-center gap-3">
-            <div className="bg-purple-600 px-3 py-1.5 rounded-full text-sm font-bold shadow-lg shadow-purple-500/30">Room {roomId}</div>
-            <div className="flex flex-col">
-              <span className="font-bold truncate max-w-[140px] text-slate-200 text-lg leading-none mb-0.5">{userName}</span>
-              {/* 顯示我的號碼 */}
-              {myNumber && <span className="text-xs text-yellow-400 font-bold flex items-center gap-0.5"><Hash size={10} /> 你是 {myNumber} 號</span>}
+      <div className="bg-slate-900/90 backdrop-blur-md border-b border-white/5 sticky top-0 z-50 shadow-lg p-4 flex justify-between items-center gap-4">
+
+        {/* 左側：房間資訊與名單 (壓縮在左邊) */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="bg-purple-600 px-2 py-0.5 rounded text-xs font-bold shadow">Room {roomId}</div>
+            <div className="text-xs text-slate-400 flex items-center gap-1 bg-slate-800 px-2 py-0.5 rounded-full">
+              <Users size={12} /> {participantList.length}
             </div>
           </div>
-          <div className="text-sm text-slate-400 flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-full">
-            <Users size={16} /> {participantList.length}
+
+          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar mask-gradient">
+            {participantList.map(([uid, name]) => (
+              <span key={uid} className={`shrink-0 px-2 py-0.5 rounded text-[10px] border flex items-center gap-1 transition-all ${uid === user.uid ? 'bg-purple-500/20 border-purple-500/50 text-purple-200' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
+                {uid === roomData.hostId && <span className="text-yellow-400">👑</span>}
+                {name}
+              </span>
+            ))}
           </div>
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-          {participantList.map(([uid, name]) => (
-            <span key={uid} className={`shrink-0 px-4 py-1.5 rounded-full text-sm border flex items-center gap-1 transition-all ${uid === user.uid ? 'bg-purple-500/20 border-purple-500/50 text-purple-200' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
-              {uid === roomData.hostId && <span className="text-yellow-400">👑</span>}
-              {name}
-            </span>
-          ))}
-        </div>
+        {/* 右側：固定顯示離開按鈕 */}
+        <button
+          onClick={leaveRoom}
+          className="shrink-0 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white border border-red-500/50 p-2 rounded-lg transition-colors flex flex-col items-center justify-center w-14 h-14"
+          title="離開房間"
+        >
+          <LogOut size={20} />
+          <span className="text-[10px] mt-1">離開</span>
+        </button>
       </div>
 
       <main className={`relative z-10 max-w-3xl mx-auto p-4 flex flex-col gap-8 ${roomData.phase === 'punishment-reveal' ? 'h-screen p-0 m-0 max-w-none' : 'mt-4'}`}>
@@ -1039,7 +1047,7 @@ const App = () => {
 
         {/* --- 階段 7: 懲罰揭曉 (Compact Layout) --- */}
         {roomData.phase === 'punishment-reveal' && (
-          <div className="animate-fade-in flex flex-col h-[calc(100vh-20px)] overflow-hidden w-full max-w-md mx-auto">
+          <div className="animate-fade-in flex flex-col h-[calc(100vh-80px)] overflow-hidden w-full max-w-md mx-auto">
 
             {/* 1. 雷王資訊 (Compact) */}
             {(() => {
@@ -1118,6 +1126,7 @@ const App = () => {
         .animate-fade-in-up { animation: fade-in-up 0.4s ease-out forwards; }
         .no-scrollbar::-webkit-scrollbar { display: none; } 
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .mask-gradient { mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent); }
       `}</style>
     </div>
   );
