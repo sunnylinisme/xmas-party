@@ -333,7 +333,7 @@ const App = () => {
           setPunishmentPool(pool);
         }
 
-        // --- 自動流程 (由房主觸發) ---
+        // --- 自動流程 (由主持人觸發) ---
         if (data.hostId === user.uid) {
           const participantCount = Object.keys(data.participants).length;
 
@@ -399,7 +399,7 @@ const App = () => {
       showToast("房間已清除 👋");
     } else {
       let updates = { participants: newParticipants };
-      // 房主離開不轉移權限 (維持原房主ID，即便他不在，避免權限亂跑)
+      // 主持人離開不轉移權限 (維持原主持人ID，即便他不在，避免權限亂跑)
       await updateDoc(roomRef, updates);
     }
 
@@ -594,7 +594,7 @@ const App = () => {
     showToast("評分已送出！等待開票...");
   };
 
-  // 抽獎邏輯 (房主執行)
+  // 抽獎邏輯 (主持人執行)
   const spinPunishment = async () => {
     // 1. 決定結果
     let pool = Object.values(roomData.punishments || {});
@@ -677,29 +677,27 @@ const App = () => {
         <CountdownDisplay onFinish={() => isHost && nextPhase('result')} />
       )}
 
-      {/* 頂部資訊列 (只在非全螢幕頁面顯示) */}
-      {roomData.phase !== 'punishment-reveal' && (
-        <div className="bg-slate-900/90 backdrop-blur-md border-b border-white/5 sticky top-0 z-50 shadow-lg p-4">
-          <div className="flex justify-between items-center mb-3">
-            <div className="flex items-center gap-3">
-              <div className="bg-purple-600 px-3 py-1.5 rounded-full text-sm font-bold shadow-lg shadow-purple-500/30">Room {roomId}</div>
-              <span className="font-bold truncate max-w-[140px] text-slate-200 text-lg">{userName}</span>
-            </div>
-            <div className="text-sm text-slate-400 flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-full">
-              <Users size={16} /> {participantList.length}
-            </div>
+      {/* 頂部資訊列 (現在全頁面顯示) */}
+      <div className="bg-slate-900/90 backdrop-blur-md border-b border-white/5 sticky top-0 z-50 shadow-lg p-4">
+        <div className="flex justify-between items-center mb-3">
+          <div className="flex items-center gap-3">
+            <div className="bg-purple-600 px-3 py-1.5 rounded-full text-sm font-bold shadow-lg shadow-purple-500/30">Room {roomId}</div>
+            <span className="font-bold truncate max-w-[140px] text-slate-200 text-lg">{userName}</span>
           </div>
-
-          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-            {participantList.map(([uid, name]) => (
-              <span key={uid} className={`shrink-0 px-4 py-1.5 rounded-full text-sm border flex items-center gap-1 transition-all ${uid === user.uid ? 'bg-purple-500/20 border-purple-500/50 text-purple-200' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
-                {uid === roomData.hostId && <span className="text-yellow-400">👑</span>}
-                {name}
-              </span>
-            ))}
+          <div className="text-sm text-slate-400 flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-full">
+            <Users size={16} /> {participantList.length}
           </div>
         </div>
-      )}
+
+        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+          {participantList.map(([uid, name]) => (
+            <span key={uid} className={`shrink-0 px-4 py-1.5 rounded-full text-sm border flex items-center gap-1 transition-all ${uid === user.uid ? 'bg-purple-500/20 border-purple-500/50 text-purple-200' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
+              {uid === roomData.hostId && <span className="text-yellow-400">👑</span>}
+              {name}
+            </span>
+          ))}
+        </div>
+      </div>
 
       <main className={`relative z-10 max-w-3xl mx-auto p-4 flex flex-col gap-8 ${roomData.phase === 'punishment-reveal' ? 'h-screen p-0 m-0 max-w-none' : 'mt-4'}`}>
 
@@ -729,7 +727,7 @@ const App = () => {
                   下一步：登錄禮物 <ArrowRight />
                 </Button>
               ) : (
-                <p className="text-slate-500 animate-pulse text-base">等待房主開始遊戲...</p>
+                <p className="text-slate-500 animate-pulse text-base">等待主持人開始遊戲...</p>
               )}
             </Card>
           </div>
@@ -1035,13 +1033,13 @@ const App = () => {
                 )}
 
                 {!isHost && !roomData.finalPunishment && (
-                  <div className="text-center text-slate-500 py-2 text-sm animate-pulse">等待房主啟動輪盤...</div>
+                  <div className="text-center text-slate-500 py-2 text-sm animate-pulse">等待主持人啟動輪盤...</div>
                 )}
 
                 {/* 只有結果出來後才顯示離開按鈕 */}
                 {roomData.finalPunishment && (
                   <Button variant="secondary" onClick={leaveRoom} className="w-full bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white py-4 animate-fade-in">
-                    <LogOut size={20} /> 結束遊戲
+                    <LogOut size={20} /> 結束遊戲離開房間
                   </Button>
                 )}
               </div>
