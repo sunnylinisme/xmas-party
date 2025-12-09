@@ -84,6 +84,7 @@ const RouletteWheel = ({ items, targetItem, isSpinning, className }) => {
   const [rotation, setRotation] = useState(0);
 
   useEffect(() => {
+    // 只有當真的有結果，且目前還沒轉到定位時才計算
     if (targetItem && items.length > 0) {
       const targetIndex = items.indexOf(targetItem);
       if (targetIndex === -1) return;
@@ -94,7 +95,7 @@ const RouletteWheel = ({ items, targetItem, isSpinning, className }) => {
       const centerAngle = (targetIndex * segmentAngle) + (segmentAngle / 2);
 
       // 基礎旋轉：多轉10圈 + 對齊角度
-      // 移除隨機偏移，確保精準對齊，避免 A/B 兩端顯示不同
+      // ⚠️ 移除 Math.random() 偏移，確保所有裝置指針位置完全一致
       const baseRotation = 3600 + (360 - centerAngle);
 
       setRotation(baseRotation);
@@ -261,13 +262,13 @@ const App = () => {
     setToast(msg);
   };
 
-  // 🔒 確保懲罰池在所有客戶端排序一致 (使用 ASCII sort)
-  // 修正：完全不使用 localeCompare，確保跨平台一致性
+  // 🔒 確保懲罰池在所有客戶端排序一致 (使用 default sort)
+  // 修正：完全不使用 localeCompare，使用預設排序確保跨平台一致性
+  // 並且使用 [...array] 進行淺拷貝，避免修改到原始參考
   const punishmentPool = useMemo(() => {
     const punishments = roomData?.punishments ? Object.values(roomData.punishments) : [];
     const pool = punishments.length === 0 ? [...RANDOM_PUNISHMENTS] : punishments;
-    // 強制使用最原始的 sort() (ASCII 碼排序)，確保全世界一致
-    return pool.sort();
+    return [...pool].sort();
   }, [roomData?.punishments]);
 
   if (!isConfigured) {
@@ -340,9 +341,14 @@ const App = () => {
         if (data.isSpinning && !hasTriggeredAnimation.current) {
           hasTriggeredAnimation.current = true;
           setShowFinalResult(false);
+
+          // 修正：使用循環取代隨機，確保顯示一致
+          let index = 0;
           const interval = setInterval(() => {
-            let p = data.punishments ? Object.values(data.punishments) : RANDOM_PUNISHMENTS;
-            setRandomText(p[Math.floor(Math.random() * p.length)]);
+            let pool = data.punishments ? Object.values(data.punishments) : RANDOM_PUNISHMENTS;
+            pool.sort(); // 確保順序一致
+            setRandomText(pool[index % pool.length]); // 循環播放
+            index++;
           }, 100);
 
           const timeout = setTimeout(() => {
@@ -392,7 +398,7 @@ const App = () => {
       }
     });
     return () => unsubscribe();
-  }, [user, roomId]);
+  }, [user, roomId]); // ⚠️ 注意：這裡拿掉了 showFinalResult 依賴以避免無限重繪
 
   // --- 動作函式 ---
 
@@ -749,7 +755,7 @@ const App = () => {
           <div className="animate-fade-in space-y-8">
             <Card className="text-center py-16 border-t-4 border-t-emerald-500">
               <h2 className="text-3xl font-bold mb-3">準備開始</h2>
-              <p className="text-slate-400 text-lg mb-10">等待其他玩家加入...</p>
+              <p className="text-slate-400 text-lg mb-10">等待主持人開始遊戲...</p>
 
               <div className="flex flex-wrap gap-3 justify-center mb-10">
                 {participantList.map(([uid, name]) => (
@@ -1033,7 +1039,7 @@ const App = () => {
 
         {/* --- 階段 7: 懲罰揭曉 (Compact Layout) --- */}
         {roomData.phase === 'punishment-reveal' && (
-          <div className="animate-fade-in flex flex-col h-[calc(100vh-80px)] overflow-hidden w-full max-w-md mx-auto">
+          <div className="animate-fade-in flex flex-col h-[calc(100vh-20px)] overflow-hidden w-full max-w-md mx-auto">
 
             {/* 1. 雷王資訊 (Compact) */}
             {(() => {
