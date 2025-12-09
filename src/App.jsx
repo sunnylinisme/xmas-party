@@ -79,12 +79,11 @@ const Toast = ({ message, onClose }) => {
   );
 };
 
-// --- 輪盤元件 (Roulette) - 修正同步版 ---
+// --- 輪盤元件 (Roulette) - 修正：移除隨機偏移，確保同步 ---
 const RouletteWheel = ({ items, targetItem, isSpinning, className }) => {
   const [rotation, setRotation] = useState(0);
 
   useEffect(() => {
-    // 只有當真的有結果，且目前還沒轉到定位時才計算
     if (targetItem && items.length > 0) {
       const targetIndex = items.indexOf(targetItem);
       if (targetIndex === -1) return;
@@ -95,18 +94,17 @@ const RouletteWheel = ({ items, targetItem, isSpinning, className }) => {
       const centerAngle = (targetIndex * segmentAngle) + (segmentAngle / 2);
 
       // 基礎旋轉：多轉10圈 + 對齊角度
-      // 移除隨機偏移，確保精準對齊
+      // ⚠️ 移除 Math.random() 偏移，確保所有裝置指針位置完全一致
       const baseRotation = 3600 + (360 - centerAngle);
 
       setRotation(baseRotation);
     }
-  }, [targetItem, items]); // 移除 isSpinning 依賴，只要有 targetItem 就轉，避免因為狀態變動重轉
+  }, [targetItem, items]);
 
   const colors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7', '#ec4899', '#6366f1'];
 
   return (
     <div className={`relative w-80 h-80 md:w-[500px] md:h-[500px] mx-auto ${className}`}>
-      {/* 指針 */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-4 z-20 filter drop-shadow-lg">
         <ChevronDown size={60} className="text-white fill-white stroke-[4px] stroke-slate-900" />
       </div>
@@ -252,6 +250,9 @@ const App = () => {
   const [randomText, setRandomText] = useState("🎲 準備抽出...");
   const [showFinalResult, setShowFinalResult] = useState(false);
 
+  // 鎖定動畫狀態，避免重複觸發
+  const hasTriggeredAnimation = useRef(false);
+
   // 我的號碼
   const myNumber = roomData?.participantNumbers?.[user?.uid];
 
@@ -332,31 +333,6 @@ const App = () => {
           }
         }
 
-        // 處理抽獎動畫 (只在第一次開獎時執行)
-        if (data.isSpinning && !showFinalResult) {
-          setShowFinalResult(false);
-          const interval = setInterval(() => {
-            // 使用 punishmentPool (雖無法直接取用 memo，但邏輯保持一致)
-            let p = data.punishments ? Object.values(data.punishments) : RANDOM_PUNISHMENTS;
-            setRandomText(p[Math.floor(Math.random() * p.length)]);
-          }, 100);
-
-          const timeout = setTimeout(() => {
-            clearInterval(interval);
-            setShowFinalResult(true);
-          }, 5000);
-
-          return () => {
-            clearInterval(interval);
-            clearTimeout(timeout);
-          }
-        }
-
-        // 如果已經有結果且 spinning 為 true (後進來的人)，直接顯示結果
-        if (data.finalPunishment && data.isSpinning && !showFinalResult) {
-          setShowFinalResult(true);
-        }
-
         // --- 自動流程 (由主持人觸發) ---
         if (data.hostId === user.uid) {
           const participantCount = Object.keys(data.participants).length;
@@ -387,7 +363,51 @@ const App = () => {
       }
     });
     return () => unsubscribe();
-  }, [user, roomId]); // ⚠️ 注意：這裡拿掉了 showFinalResult 依賴以避免無限重繪
+  }, [user, roomId]);
+
+  // 修正：抽獎動畫邏輯獨立出來，不放在 onSnapshot 裡
+  // 依賴 finalPunishment 與 isSpinning 的變化，而不是 roomData 的所有變化
+  useEffect(() => {
+    if (!roomData) return;
+
+    // 如果正在轉動且尚未觸發過動畫 -> 開始動畫
+    if (roomData.isSpinning && !hasTriggeredAnimation.current) {
+      hasTriggeredAnimation.current = true; // 鎖定
+      setShowFinalResult(false);
+
+      // 文字跳動效果
+      const interval = setInterval(() => {
+        let pool = roomData.punishments ? Object.values(roomData.punishments) : RANDOM_PUNISHMENTS;
+        setRandomText(pool[Math.floor(Math.random() * pool.length)]);
+      }, 100);
+
+      // 5秒後停止動畫並顯示結果
+      const timeout = setTimeout(() => {
+        clearInterval(interval);
+        setShowFinalResult(true);
+      }, 5000);
+
+      return () => {
+        clearInterval(interval);
+        clearTimeout(timeout);
+      }
+    }
+
+    // 如果一進來就已經有結果了 (例如中途加入或重整)，直接顯示
+    if (!roomData.isSpinning && roomData.finalPunishment && !showFinalResult) {
+      setShowFinalResult(true);
+      hasTriggeredAnimation.current = true; // 視為已播放
+    }
+
+    // 如果重置了 (例如房主重抽)，解鎖
+    if (!roomData.isSpinning && !roomData.finalPunishment) {
+      hasTriggeredAnimation.current = false;
+      setShowFinalResult(false);
+      setRandomText("🎲 準備抽出...");
+    }
+
+  }, [roomData?.isSpinning, roomData?.finalPunishment]);
+
 
   // --- 動作函式 ---
 
