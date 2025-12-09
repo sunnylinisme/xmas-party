@@ -82,8 +82,8 @@ const Toast = ({ message, onClose }) => {
   );
 };
 
-// --- 輪盤元件 (Roulette) ---
-const RouletteWheel = ({ items, targetItem, isSpinning }) => {
+// --- 輪盤元件 (Roulette) - 修正版 ---
+const RouletteWheel = ({ items, targetItem, isSpinning, className }) => {
   const [rotation, setRotation] = useState(0);
 
   useEffect(() => {
@@ -92,22 +92,32 @@ const RouletteWheel = ({ items, targetItem, isSpinning }) => {
       if (targetIndex === -1) return;
 
       const segmentAngle = 360 / items.length;
-      const randomOffset = Math.random() * (segmentAngle * 0.8) - (segmentAngle * 0.4);
-      const targetRotation = 3600 + (360 - (targetIndex * segmentAngle)) + randomOffset;
 
-      setRotation(targetRotation);
+      // 計算目標中心點的角度 (以0度為起點)
+      // 逆時針旋轉角度
+      const centerAngle = (targetIndex * segmentAngle) + (segmentAngle / 2);
+
+      // 基礎旋轉：多轉10圈 + 對齊角度
+      const baseRotation = 3600 + (360 - centerAngle);
+
+      // 隨機偏移 (區塊內 +/- 40%)
+      const randomOffset = (Math.random() - 0.5) * (segmentAngle * 0.8);
+
+      setRotation(baseRotation + randomOffset);
     }
   }, [isSpinning, targetItem, items]);
 
   const colors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7', '#ec4899', '#6366f1'];
 
   return (
-    <div className="relative w-72 h-72 md:w-96 md:h-96 mx-auto my-8">
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-4 z-20">
-        <ChevronDown size={48} className="text-white drop-shadow-lg fill-white" />
+    <div className={`relative w-64 h-64 md:w-80 md:h-80 mx-auto ${className}`}>
+      {/* 指針 (固定在上方) */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-3 z-20 filter drop-shadow-lg">
+        <ChevronDown size={40} className="text-white fill-white stroke-[3px] stroke-slate-900" />
       </div>
+
       <div
-        className="w-full h-full rounded-full border-4 border-slate-700 shadow-2xl relative overflow-hidden transition-transform duration-[5000ms] cubic-bezier(0.1, 0.7, 0.1, 1)"
+        className="w-full h-full rounded-full border-4 border-slate-800 shadow-2xl relative overflow-hidden transition-transform duration-[5000ms] cubic-bezier(0.15, 0.85, 0.15, 1)"
         style={{
           transform: `rotate(${rotation}deg)`,
           background: `conic-gradient(${items.map((_, i) => `${colors[i % colors.length]} ${i * (100 / items.length)}% ${(i + 1) * (100 / items.length)}%`).join(', ')
@@ -122,15 +132,15 @@ const RouletteWheel = ({ items, targetItem, isSpinning }) => {
               className="absolute top-1/2 left-1/2 w-1/2 h-1 origin-left flex items-center"
               style={{ transform: `rotate(${angle - 90}deg)` }}
             >
-              <div className="pl-8 text-white font-bold text-sm md:text-base truncate w-32 md:w-40 text-shadow" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>
+              <div className="pl-8 text-white font-bold text-xs md:text-sm truncate w-24 md:w-32 text-shadow" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>
                 {item}
               </div>
             </div>
           )
         })}
       </div>
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-slate-800 rounded-full border-4 border-slate-600 flex items-center justify-center shadow-xl z-10">
-        <Skull className="text-slate-400" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-slate-800 rounded-full border-2 border-slate-600 flex items-center justify-center shadow-xl z-10">
+        <Skull className="text-slate-400" size={20} />
       </div>
     </div>
   );
@@ -389,7 +399,7 @@ const App = () => {
       showToast("房間已清除 👋");
     } else {
       let updates = { participants: newParticipants };
-      // 房主離開不轉移權限
+      // 房主離開不轉移權限 (維持原房主ID，即便他不在，避免權限亂跑)
       await updateDoc(roomRef, updates);
     }
 
@@ -517,7 +527,6 @@ const App = () => {
     // 進入結果畫面時，建立成績快照 (Snapshot)
     if (nextPhaseName === 'result') {
       const results = Object.keys(currentData.participants).map(uid => {
-        // FIX: 改為讀取 ratings，而不是 matchDetails (那是舊版的)
         const userRatings = currentData.ratings ? currentData.ratings[uid] : {};
         const totalScore = Object.values(userRatings || {}).reduce((a, b) => a + b, 0);
         return {
@@ -659,7 +668,7 @@ const App = () => {
   const participantList = Object.entries(roomData.participants).sort((a, b) => a[0].localeCompare(b[0]));
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 font-sans text-white relative pb-20">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 font-sans text-white relative pb-20 overflow-hidden">
       <SnowBackground />
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
 
@@ -668,29 +677,31 @@ const App = () => {
         <CountdownDisplay onFinish={() => isHost && nextPhase('result')} />
       )}
 
-      {/* 頂部資訊列 */}
-      <div className="bg-slate-900/90 backdrop-blur-md border-b border-white/5 sticky top-0 z-50 shadow-lg p-4">
-        <div className="flex justify-between items-center mb-3">
-          <div className="flex items-center gap-3">
-            <div className="bg-purple-600 px-3 py-1.5 rounded-full text-sm font-bold shadow-lg shadow-purple-500/30">Room {roomId}</div>
-            <span className="font-bold truncate max-w-[140px] text-slate-200 text-lg">{userName}</span>
+      {/* 頂部資訊列 (只在非全螢幕頁面顯示) */}
+      {roomData.phase !== 'punishment-reveal' && (
+        <div className="bg-slate-900/90 backdrop-blur-md border-b border-white/5 sticky top-0 z-50 shadow-lg p-4">
+          <div className="flex justify-between items-center mb-3">
+            <div className="flex items-center gap-3">
+              <div className="bg-purple-600 px-3 py-1.5 rounded-full text-sm font-bold shadow-lg shadow-purple-500/30">Room {roomId}</div>
+              <span className="font-bold truncate max-w-[140px] text-slate-200 text-lg">{userName}</span>
+            </div>
+            <div className="text-sm text-slate-400 flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-full">
+              <Users size={16} /> {participantList.length}
+            </div>
           </div>
-          <div className="text-sm text-slate-400 flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-full">
-            <Users size={16} /> {participantList.length}
+
+          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+            {participantList.map(([uid, name]) => (
+              <span key={uid} className={`shrink-0 px-4 py-1.5 rounded-full text-sm border flex items-center gap-1 transition-all ${uid === user.uid ? 'bg-purple-500/20 border-purple-500/50 text-purple-200' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
+                {uid === roomData.hostId && <span className="text-yellow-400">👑</span>}
+                {name}
+              </span>
+            ))}
           </div>
         </div>
+      )}
 
-        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-          {participantList.map(([uid, name]) => (
-            <span key={uid} className={`shrink-0 px-4 py-1.5 rounded-full text-sm border flex items-center gap-1 transition-all ${uid === user.uid ? 'bg-purple-500/20 border-purple-500/50 text-purple-200' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
-              {uid === roomData.hostId && <span className="text-yellow-400">👑</span>}
-              {name}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <main className="relative z-10 max-w-3xl mx-auto p-4 flex flex-col gap-8 mt-4">
+      <main className={`relative z-10 max-w-3xl mx-auto p-4 flex flex-col gap-8 ${roomData.phase === 'punishment-reveal' ? 'h-screen p-0 m-0 max-w-none' : 'mt-4'}`}>
 
         {/* --- 階段 1: 等待大廳 (Entry) --- */}
         {roomData.phase === 'entry' && (
@@ -795,7 +806,7 @@ const App = () => {
           <div className="animate-fade-in space-y-8">
             <Card>
               <h2 className="text-2xl font-bold text-center mb-2 flex items-center justify-center gap-2">
-                <Bomb className="text-red-500" size={28} /> 你的惡作劇
+                <Bomb className="text-red-500" size={28} /> 你的懲罰點子
               </h2>
               <p className="text-sm text-slate-400 text-center mb-8">請提供一個「懲罰」，最後大家一起抽！</p>
 
@@ -811,12 +822,12 @@ const App = () => {
 
               <div className="flex justify-end mb-8">
                 <button onClick={pickRandomPunishmentInput} disabled={roomData.punishments && roomData.punishments[user.uid]} className="text-sm text-red-300 flex items-center gap-2 hover:text-white transition-colors bg-red-500/10 px-4 py-2 rounded-full border border-red-500/20">
-                  <Shuffle size={16} /> 隨機壞點子
+                  <Shuffle size={16} /> 隨機懲罰靈感
                 </button>
               </div>
 
               <Button onClick={submitPunishmentInput} className="w-full text-xl py-5 bg-red-600 hover:bg-red-500 shadow-red-900/50 border-none" disabled={!myPunishmentInput}>
-                {roomData.punishments && roomData.punishments[user.uid] ? "已送出等待中..." : "送出惡作劇"}
+                {roomData.punishments && roomData.punishments[user.uid] ? "已送出等待中..." : "送出懲罰"}
               </Button>
             </Card>
 
@@ -965,70 +976,74 @@ const App = () => {
                 </Button>
               </div>
             )}
-
-            {/* 確保所有人都看得到離開按鈕 */}
-            <div className="mt-8 text-center">
-              <Button variant="secondary" onClick={leaveRoom} className="w-full max-w-md mx-auto bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white">
-                <LogOut size={20} /> 離開房間
-              </Button>
-            </div>
           </div>
         )}
 
-        {/* --- 階段 7: 懲罰揭曉 (Punishment Reveal) --- */}
+        {/* --- 階段 7: 懲罰揭曉 (Compact Layout) --- */}
         {roomData.phase === 'punishment-reveal' && (
-          <div className="animate-fade-in space-y-8 pb-20 flex flex-col h-full">
-            {/* 置頂：雷王資訊 */}
+          <div className="animate-fade-in flex flex-col h-[calc(100vh-20px)] overflow-hidden w-full max-w-md mx-auto">
+
+            {/* 1. 雷王資訊 (Compact) */}
             {(() => {
               const loser = (roomData.finalResults || []).sort((a, b) => b.totalScore - a.totalScore)[0];
               if (!loser) return null;
 
               return (
-                <div className="text-center py-6 border-b border-white/10 bg-black/20">
-                  <p className="text-slate-400 text-sm mb-2 uppercase tracking-widest">The Loser is</p>
-                  <h2 className="text-6xl font-black text-red-500 drop-shadow-[0_0_15px_rgba(239,68,68,0.5)] mb-2">{loser.name}</h2>
-                  <div className="text-xl text-white font-bold bg-red-600 inline-block px-4 py-1 rounded-full">
-                    {loser.totalScore} 分
+                <div className="shrink-0 text-center py-4 bg-slate-900/50 border-b border-white/10 relative z-20">
+                  <p className="text-slate-500 text-xs uppercase tracking-[0.2em] mb-1">The Loser is</p>
+                  <div className="flex flex-col items-center gap-1">
+                    <h2 className="text-4xl font-black text-red-500 drop-shadow-[0_0_15px_rgba(239,68,68,0.6)] leading-none">{loser.name}</h2>
+                    <span className="text-sm font-bold text-white bg-red-600 px-3 py-0.5 rounded-full shadow-lg">{loser.totalScore} 分</span>
                   </div>
                 </div>
               );
             })()}
 
-            <div className="flex-1 flex flex-col items-center justify-center p-4">
-              <h3 className="text-2xl font-bold text-white mb-4 flex items-center gap-3">
-                <Skull size={32} className="text-slate-400" /> 命運大輪盤 <Skull size={32} className="text-slate-400" />
+            {/* 2. 輪盤 (Flexible) */}
+            <div className="flex-1 flex flex-col items-center justify-center relative min-h-0">
+              <h3 className="text-lg font-bold text-slate-300 mb-2 flex items-center gap-2 shrink-0">
+                <Skull size={20} /> 命運大輪盤 <Skull size={20} />
               </h3>
 
-              <RouletteWheel
-                items={punishmentPool}
-                targetItem={roomData.finalPunishment}
-                isSpinning={roomData.isSpinning}
-              />
+              {/* 輪盤縮放容器 */}
+              <div className="scale-75 md:scale-90 origin-center transition-transform">
+                <RouletteWheel
+                  items={punishmentPool}
+                  targetItem={roomData.finalPunishment}
+                  isSpinning={roomData.isSpinning}
+                />
+              </div>
+            </div>
 
-              {/* 最終結果顯示 (動畫結束後才清楚顯示文字) */}
+            {/* 3. 結果與控制 (Bottom Fixed) */}
+            <div className="shrink-0 p-4 w-full bg-slate-900/80 border-t border-white/10 backdrop-blur-md relative z-30 pb-8">
+              {/* 結果顯示 */}
               {roomData.finalPunishment && (
-                <div className="mt-8 text-center animate-fade-in delay-1000">
-                  <p className="text-slate-400 text-sm mb-2">懲罰內容</p>
-                  <div className="text-3xl font-black text-yellow-400 bg-slate-900/80 px-6 py-4 rounded-xl border border-yellow-500/50 max-w-sm mx-auto">
+                <div className="mb-4 animate-fade-in-up">
+                  <div className="text-yellow-400 font-black text-2xl md:text-3xl text-center bg-black/40 border-2 border-yellow-500/50 p-4 rounded-xl shadow-xl leading-tight">
                     {roomData.finalPunishment}
                   </div>
                 </div>
               )}
 
-              <div className="mt-8 w-full max-w-xs space-y-4">
-                {/* 只有房主能按開始 */}
-                {isHost ? (
-                  <Button variant="neutral" size="lg" onClick={spinPunishment} className="w-full text-xl py-5" disabled={roomData.isSpinning}>
+              {/* 按鈕區 */}
+              <div className="space-y-3">
+                {isHost && !roomData.finalPunishment && (
+                  <Button variant="neutral" size="lg" onClick={spinPunishment} className="w-full text-xl py-4 shadow-lg shadow-blue-900/20" disabled={roomData.isSpinning}>
                     {roomData.isSpinning ? "抽選中..." : "🎲 啟動輪盤"}
                   </Button>
-                ) : (
-                  !roomData.finalPunishment && <div className="text-center text-slate-500 py-4">等待房主啟動輪盤...</div>
                 )}
 
-                {/* 所有人都能按離開 */}
-                <Button variant="secondary" onClick={leaveRoom} className="w-full bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white mt-8">
-                  <LogOut size={20} /> 結束遊戲
-                </Button>
+                {!isHost && !roomData.finalPunishment && (
+                  <div className="text-center text-slate-500 py-2 text-sm animate-pulse">等待房主啟動輪盤...</div>
+                )}
+
+                {/* 只有結果出來後才顯示離開按鈕 */}
+                {roomData.finalPunishment && (
+                  <Button variant="secondary" onClick={leaveRoom} className="w-full bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white py-4 animate-fade-in">
+                    <LogOut size={20} /> 結束遊戲
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -1040,8 +1055,10 @@ const App = () => {
       <style>{`
         @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } 
         @keyframes fade-in-down { from { opacity: 0; transform: translateY(-20px) translateX(-50%); } to { opacity: 1; transform: translateY(0) translateX(-50%); } }
+        @keyframes fade-in-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fade-in 0.5s ease-out forwards; } 
         .animate-fade-in-down { animation: fade-in-down 0.5s ease-out forwards; }
+        .animate-fade-in-up { animation: fade-in-up 0.4s ease-out forwards; }
         .no-scrollbar::-webkit-scrollbar { display: none; } 
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
