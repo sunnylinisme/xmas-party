@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, memo, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, getDoc, deleteDoc, deleteField, increment } from 'firebase/firestore';
-import { Gift, Users, ArrowRight, Zap, Skull, Play, Edit3, AlertTriangle, LogIn, Share2, Link as LinkIcon, RotateCcw, Shuffle, Star, Save, X, LogOut, Info, CheckCircle, Clock, Bomb, ChevronDown, Hash, Lightbulb } from 'lucide-react';
+import { Gift, Users, ArrowRight, Zap, Skull, Play, Edit3, AlertTriangle, LogIn, Share2, Link as LinkIcon, RotateCcw, Shuffle, Star, Save, X, LogOut, Info, CheckCircle, Clock, Bomb, ChevronDown, Hash, Lightbulb, RefreshCw } from 'lucide-react';
 
 // ==========================================
 // ⚠️ 你的 Firebase 設定
@@ -23,7 +23,7 @@ const app = isConfigured ? initializeApp(firebaseConfig) : null;
 const auth = isConfigured ? getAuth(app) : null;
 const db = isConfigured ? getFirestore(app) : null;
 
-// --- 嚴格統一排序函式 (確保所有客戶端順序一致) ---
+// --- 嚴格統一排序函式 ---
 const strictSort = (list) => {
   return [...list].sort((a, b) => (a > b ? 1 : -1));
 };
@@ -79,67 +79,6 @@ const Toast = ({ message, onClose }) => {
       <div className="bg-slate-800 text-white px-6 py-3 rounded-full shadow-2xl border border-slate-600 flex items-center gap-2">
         <Info size={18} className="text-blue-400 shrink-0" />
         <span className="font-bold text-sm md:text-base">{message}</span>
-      </div>
-    </div>
-  );
-};
-
-// --- 輪盤元件 (Roulette) - 修正：響應式大小 + 無限旋轉動畫 ---
-const RouletteWheel = ({ items, targetItem, isSpinning, className }) => {
-  const [rotation, setRotation] = useState(0);
-
-  useEffect(() => {
-    // 只有當「停止旋轉」且「有結果」時，才計算最終角度
-    if (!isSpinning && targetItem && items.length > 0) {
-      const targetIndex = items.indexOf(targetItem);
-      if (targetIndex === -1) return;
-
-      const segmentAngle = 360 / items.length;
-      const centerAngle = (targetIndex * segmentAngle) + (segmentAngle / 2);
-      // 這裡不需要多轉圈，因為 CSS animation 已經轉了很多圈
-      // 我們只需要設定「最終停留」的角度 (需抵銷 CSS animation 的結束狀態，或者直接設定 transform)
-      // 為了簡單，我們計算一個絕對角度
-      const baseRotation = 3600 + (360 - centerAngle);
-      setRotation(baseRotation);
-    }
-  }, [targetItem, items, isSpinning]);
-
-  const colors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7', '#ec4899', '#6366f1'];
-
-  return (
-    // 使用 vmin 或百分比來控制大小，確保在手機和電腦都不會爆版
-    <div className={`relative w-[70vmin] h-[70vmin] max-w-[400px] max-h-[400px] mx-auto my-2 ${className}`}>
-      {/* 指針 */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-2 z-20 filter drop-shadow-lg">
-        <ChevronDown size={40} className="text-white fill-white stroke-[4px] stroke-slate-900" />
-      </div>
-
-      <div
-        className={`w-full h-full rounded-full border-4 md:border-8 border-slate-800 shadow-2xl relative overflow-hidden ${isSpinning ? 'animate-spin-fast' : 'transition-transform duration-[3000ms] cubic-bezier(0.1, 0, 0.1, 1)'}`}
-        style={{
-          transform: isSpinning ? 'none' : `rotate(${rotation}deg)`,
-          background: `conic-gradient(${items.map((_, i) => `${colors[i % colors.length]} ${i * (100 / items.length)}% ${(i + 1) * (100 / items.length)}%`).join(', ')
-            })`
-        }}
-      >
-        {items.map((item, i) => {
-          const angle = (360 / items.length) * i + (360 / items.length) / 2;
-          return (
-            <div
-              key={i}
-              className="absolute top-1/2 left-1/2 w-1/2 h-1 origin-left flex items-center"
-              style={{ transform: `rotate(${angle - 90}deg)` }}
-            >
-              {/* 調整文字位置與大小，避免超出 */}
-              <div className="pl-8 md:pl-12 text-white font-bold text-xs md:text-base truncate w-24 md:w-36 text-shadow" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>
-                {item}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-slate-800 rounded-full border-4 border-slate-600 flex items-center justify-center shadow-xl z-10">
-        <Skull className="text-slate-400" size={24} />
       </div>
     </div>
   );
@@ -270,7 +209,7 @@ const App = () => {
   const punishmentPool = useMemo(() => {
     const punishments = roomData?.punishments ? Object.values(roomData.punishments) : [];
     const pool = punishments.length === 0 ? [...RANDOM_PUNISHMENTS] : punishments;
-    // ⚠️ 關鍵：確保每個裝置看到的輪盤順序一模一樣
+    // ⚠️ 關鍵：確保每個裝置看到的抽獎池順序一致，雖然現在不顯示輪盤了，但保持一致性是好的
     return strictSort(pool);
   }, [roomData?.punishments]);
 
@@ -339,23 +278,29 @@ const App = () => {
           }
         }
 
-        // 處理抽獎動畫 (只在第一次開獎時執行)
+        // 處理抽獎動畫 (改為文字跳動)
         if (data.isSpinning && !hasTriggeredAnimation.current) {
           hasTriggeredAnimation.current = true;
           setShowFinalResult(false);
 
-          let index = 0;
+          // 快速切換文字
           const interval = setInterval(() => {
             let pool = data.punishments ? Object.values(data.punishments) : RANDOM_PUNISHMENTS;
             pool = strictSort(pool);
-            setRandomText(pool[index % pool.length]);
-            index++;
-          }, 100);
+            setRandomText(pool[Math.floor(Math.random() * pool.length)]);
+          }, 80); // 速度快一點
 
+          // 動畫播放長度 (需比後端寫入時間稍微長一點點，或依賴狀態切換)
+          // 這裡我們主要依賴 data.isSpinning 變成 false 來停止
+          // 但為了防止永久轉動，我們設定一個最大時限
           const timeout = setTimeout(() => {
             clearInterval(interval);
-            setShowFinalResult(true);
-          }, 5000);
+          }, 10000);
+
+          // 清理函數：當 isSpinning 變回 false 時，這個 effect 會重新執行 (或是組件卸載)
+          // 但我們需要一個機制來停止 interval
+          // 更好的做法是：存 interval ID 到 ref
+          window.spinInterval = interval; // 暫存 global (簡單解法)
 
           return () => {
             clearInterval(interval);
@@ -363,9 +308,15 @@ const App = () => {
           }
         }
 
-        if (data.finalPunishment && data.isSpinning && !showFinalResult) {
+        // 停止轉動，顯示結果
+        if (data.finalPunishment && !data.isSpinning) {
+          if (window.spinInterval) clearInterval(window.spinInterval);
           setShowFinalResult(true);
-          hasTriggeredAnimation.current = true;
+          hasTriggeredAnimation.current = false; // 重置動畫鎖，允許下次重抽
+        } else if (data.isSpinning === false && !data.finalPunishment) {
+          // 重置狀態
+          setShowFinalResult(false);
+          hasTriggeredAnimation.current = false;
         }
 
         // --- 自動流程 (由主持人觸發) ---
@@ -417,7 +368,6 @@ const App = () => {
     // 從本地先抓取最新名單，避免併發問題
     const currentDoc = await getDoc(roomRef);
     if (!currentDoc.exists()) {
-      // 房間已經不存在
       localStorage.removeItem('xmas_last_room_id');
       window.location.reload();
       return;
@@ -432,9 +382,7 @@ const App = () => {
       await deleteDoc(roomRef);
       showToast("房間已清除 👋");
     } else {
-      // 更新名單
       let updates = { participants: newParticipants };
-      // 如果離開的是主持人，看要不要轉移權限，這裡暫時不轉移
       await updateDoc(roomRef, updates);
     }
 
@@ -643,17 +591,28 @@ const App = () => {
 
   // 抽獎邏輯 (主持人執行)
   const spinPunishment = async () => {
-    let pool = Object.values(roomData.punishments || {});
-    if (pool.length === 0) pool = RANDOM_PUNISHMENTS;
-    // ⚠️ 關鍵：強制使用 ASCII 排序，確保與前端 punishmentPool 一致
-    pool = strictSort(pool);
+    try {
+      // 1. 重置 (確保狀態清除)
+      await updateRoom({ isSpinning: true, finalPunishment: null });
 
-    const final = pool[Math.floor(Math.random() * pool.length)];
+      // 2. 延遲 3.5 秒後寫入結果 (模擬轉動)
+      setTimeout(async () => {
+        let pool = Object.values(roomData.punishments || {});
+        if (pool.length === 0) pool = RANDOM_PUNISHMENTS;
+        pool = strictSort(pool);
 
-    await updateRoom({
-      finalPunishment: final,
-      isSpinning: true
-    });
+        const final = pool[Math.floor(Math.random() * pool.length)];
+
+        await updateRoom({
+          finalPunishment: final,
+          isSpinning: false
+        });
+      }, 3500);
+    } catch (e) {
+      showToast("抽獎發生錯誤，請重試");
+      // 強制停止動畫
+      await updateRoom({ isSpinning: false });
+    }
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center bg-slate-900 text-white">載入中...</div>;
@@ -725,42 +684,32 @@ const App = () => {
         <CountdownDisplay onFinish={() => isHost && nextPhase('result')} />
       )}
 
-      {/* 頂部資訊列 (現在全頁面顯示) */}
-      <div className="bg-slate-900/90 backdrop-blur-md border-b border-white/5 sticky top-0 z-50 shadow-lg p-4 flex justify-between items-center gap-4">
-
-        {/* 左側：房間資訊與名單 (壓縮在左邊) */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="bg-purple-600 px-2 py-0.5 rounded text-xs font-bold shadow">Room {roomId}</div>
-            <div className="flex flex-col">
-              <span className="font-bold truncate max-w-[140px] text-slate-200 text-lg leading-none mb-0.5">{userName}</span>
-              {/* 顯示我的號碼 */}
-              {myNumber && <span className="text-xs text-yellow-400 font-bold flex items-center gap-0.5"><Hash size={10} /> 你是 {myNumber} 號</span>}
+      {/* 頂部資訊列 (現在全頁面顯示 - 緊湊版) */}
+      <div className="bg-slate-900/95 backdrop-blur-xl border-b border-white/5 sticky top-0 z-50 shadow-lg px-4 py-2">
+        <div className="flex justify-between items-center gap-3">
+          {/* 左邊：房間資訊與個人資訊 */}
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="bg-purple-600 px-2 py-0.5 rounded text-xs font-bold shadow shrink-0">Room {roomId}</div>
+            <div className="flex flex-col min-w-0">
+              <span className="font-bold truncate max-w-[100px] text-slate-200 text-sm leading-none mb-0.5">{userName}</span>
+              {myNumber && <span className="text-[10px] text-yellow-400 font-bold flex items-center gap-0.5"><Hash size={8} /> 你的號碼: {myNumber}</span>}
             </div>
           </div>
-          <div className="text-sm text-slate-400 flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-full">
-            <Users size={16} /> {participantList.length}
+
+          {/* 中間：人數 (手機版可能隱藏文字) */}
+          <div className="text-xs text-slate-400 flex items-center gap-1 bg-slate-800 px-2 py-1 rounded-full shrink-0">
+            <Users size={12} /> {participantList.length}
           </div>
-        </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-          {participantList.map(([uid, name]) => (
-            <span key={uid} className={`shrink-0 px-4 py-1.5 rounded-full text-sm border flex items-center gap-1 transition-all ${uid === user.uid ? 'bg-purple-500/20 border-purple-500/50 text-purple-200' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
-              {uid === roomData.hostId && <span className="text-yellow-400">👑</span>}
-              {name}
-            </span>
-          ))}
+          {/* 右邊：離開按鈕 */}
+          <button
+            onClick={leaveRoom}
+            className="shrink-0 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white border border-red-500/50 p-1.5 rounded-lg transition-colors"
+            title="離開房間"
+          >
+            <LogOut size={16} />
+          </button>
         </div>
-
-        {/* 右側：固定顯示離開按鈕 */}
-        <button
-          onClick={leaveRoom}
-          className="shrink-0 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white border border-red-500/50 p-2 rounded-lg transition-colors flex flex-col items-center justify-center w-14 h-14"
-          title="離開房間"
-        >
-          <LogOut size={20} />
-          <span className="text-[10px] mt-1">離開</span>
-        </button>
       </div>
 
       <main className={`relative z-10 max-w-3xl mx-auto p-4 flex flex-col gap-8 ${roomData.phase === 'punishment-reveal' ? 'h-screen p-0 m-0 max-w-none' : 'mt-4'}`}>
@@ -1052,70 +1001,56 @@ const App = () => {
           </div>
         )}
 
-        {/* --- 階段 7: 懲罰揭曉 (Compact Layout + Responsive) --- */}
+        {/* --- 階段 7: 懲罰揭曉 (數位跑馬燈版) --- */}
         {roomData.phase === 'punishment-reveal' && (
-          <div className="animate-fade-in flex flex-col h-[calc(100vh-20px)] w-full max-w-md mx-auto relative overflow-hidden">
+          <div className="animate-fade-in flex flex-col h-[calc(100vh-80px)] w-full max-w-md mx-auto relative overflow-hidden justify-center">
 
-            {/* 1. 雷王資訊 (Fixed Top) */}
+            {/* 1. 雷王資訊 (Compact) */}
             {(() => {
               const loser = (roomData.finalResults || []).sort((a, b) => b.totalScore - a.totalScore)[0];
               if (!loser) return null;
 
               return (
-                <div className="shrink-0 text-center py-2 bg-slate-900/50 border-b border-white/10 relative z-20">
+                <div className="shrink-0 text-center py-6 relative z-20">
                   <p className="text-slate-500 text-xs uppercase tracking-[0.2em] mb-1">The Loser is</p>
-                  <div className="flex flex-col items-center gap-1">
-                    <h2 className="text-3xl md:text-4xl font-black text-red-500 drop-shadow-[0_0_15px_rgba(239,68,68,0.6)] leading-none">{loser.name}</h2>
-                    <span className="text-sm font-bold text-white bg-red-600 px-3 py-0.5 rounded-full shadow-lg">{loser.totalScore} 分</span>
+                  <div className="flex flex-col items-center gap-2">
+                    <h2 className="text-5xl font-black text-red-500 drop-shadow-[0_0_20px_rgba(239,68,68,0.8)] leading-none animate-pulse">{loser.name}</h2>
+                    <span className="text-sm font-bold text-white bg-red-600 px-4 py-1 rounded-full shadow-lg">{loser.totalScore} 分</span>
                   </div>
                 </div>
               );
             })()}
 
-            {/* 2. 輪盤 (Flexible Center) */}
-            <div className="flex-1 flex flex-col items-center justify-center relative min-h-0 py-2">
-              <div className="flex items-center justify-center mb-2 shrink-0">
-                <h3 className="text-base font-bold text-slate-300 flex items-center gap-2">
-                  <Skull size={18} /> 命運大輪盤 <Skull size={18} />
-                </h3>
-              </div>
+            {/* 2. 數位跑馬燈顯示區 (Slot Machine Style) */}
+            <div className="flex-1 flex flex-col items-center justify-center p-4">
+              <div className="w-full bg-black/60 border-4 border-yellow-500/50 rounded-2xl p-8 relative overflow-hidden shadow-[0_0_30px_rgba(234,179,8,0.3)]">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white/50 to-transparent animate-scan"></div>
 
-              {/* 輪盤縮放容器 (使用 vmin 或 % 來控制) */}
-              <div className="scale-75 md:scale-90 origin-center transition-transform">
-                <RouletteWheel
-                  items={punishmentPool}
-                  targetItem={roomData.finalPunishment}
-                  isSpinning={roomData.isSpinning}
-                />
+                <p className="text-center text-slate-400 text-xs uppercase mb-4 tracking-widest">Punishment Protocol</p>
+
+                <div className={`text-center font-black text-3xl md:text-4xl leading-tight transition-all duration-100 ${roomData.isSpinning ? 'text-slate-300 blur-[0.5px]' : 'text-yellow-400 scale-110 drop-shadow-lg'}`}>
+                  {roomData.isSpinning ? randomText : (roomData.finalPunishment || "準備抽出...")}
+                </div>
               </div>
             </div>
 
-            {/* 3. 結果與控制 (Fixed Bottom) */}
-            <div className="shrink-0 p-4 w-full bg-slate-900/90 border-t border-white/10 backdrop-blur-md relative z-30 pb-safe">
-
-              {/* 結果顯示區 */}
-              <div className="min-h-[60px] flex items-center justify-center mb-2">
-                <div className={`text-yellow-400 font-black text-xl md:text-2xl text-center bg-black/40 border-2 ${roomData.finalPunishment && !roomData.isSpinning ? 'border-yellow-500/80' : 'border-slate-700/50'} p-3 rounded-xl shadow-xl leading-tight w-full transition-all`}>
-                  {roomData.isSpinning ? "🎲 抽選中..." : (roomData.finalPunishment || "等待主持人啟動...")}
-                </div>
-              </div>
-
-              {/* 按鈕區 */}
-              <div className="space-y-2">
+            {/* 3. 按鈕區 */}
+            <div className="shrink-0 p-6 w-full relative z-30 pb-safe">
+              <div className="space-y-3">
                 {isHost && !roomData.finalPunishment && (
-                  <Button variant="neutral" size="lg" onClick={spinPunishment} className="w-full text-lg py-3 shadow-lg shadow-blue-900/20" disabled={roomData.isSpinning}>
-                    {roomData.isSpinning ? "抽選中..." : "🎲 啟動輪盤"}
+                  <Button variant="neutral" size="lg" onClick={spinPunishment} className="w-full text-xl py-4 shadow-lg shadow-blue-900/20" disabled={roomData.isSpinning}>
+                    {roomData.isSpinning ? "🎲 抽選中..." : "🎲 抽出懲罰"}
                   </Button>
                 )}
 
                 {!isHost && !roomData.finalPunishment && (
-                  <div className="text-center text-slate-500 py-2 text-sm animate-pulse">等待主持人啟動輪盤...</div>
+                  <div className="text-center text-slate-500 py-2 text-sm animate-pulse">等待主持人抽出懲罰...</div>
                 )}
 
-                {/* 只有結果出來後才顯示離開按鈕 */}
+                {/* 結果出來後顯示 */}
                 {roomData.finalPunishment && !roomData.isSpinning && (
-                  <Button variant="secondary" onClick={leaveRoom} className="w-full bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white py-3 animate-fade-in">
-                    <LogOut size={18} /> 結束遊戲離開房間
+                  <Button variant="secondary" onClick={leaveRoom} className="w-full bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white py-4 animate-fade-in">
+                    <LogOut size={20} /> 結束遊戲並清除房間
                   </Button>
                 )}
               </div>
@@ -1130,9 +1065,8 @@ const App = () => {
         @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } 
         @keyframes fade-in-down { from { opacity: 0; transform: translateY(-20px) translateX(-50%); } to { opacity: 1; transform: translateY(0) translateX(-50%); } }
         @keyframes fade-in-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes spin-fast { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        
-        .animate-spin-fast { animation: spin-fast 0.5s linear infinite; }
+        @keyframes scan { 0% { left: -100%; } 100% { left: 100%; } }
+        .animate-scan { animation: scan 2s linear infinite; }
         .animate-fade-in { animation: fade-in 0.5s ease-out forwards; } 
         .animate-fade-in-down { animation: fade-in-down 0.5s ease-out forwards; }
         .animate-fade-in-up { animation: fade-in-up 0.4s ease-out forwards; }
