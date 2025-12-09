@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, memo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, getDoc, deleteDoc, deleteField, increment } from 'firebase/firestore';
-import { Gift, Users, ArrowRight, Zap, Skull, Play, Edit3, AlertTriangle, LogIn, Share2, Link as LinkIcon, RotateCcw, Shuffle, Star, Save, X, LogOut, Info, CheckCircle, Clock } from 'lucide-react';
+import { Gift, Users, ArrowRight, Zap, Skull, Play, Edit3, AlertTriangle, LogIn, Share2, Link as LinkIcon, RotateCcw, Shuffle, Star, Save, X, LogOut, Info, CheckCircle, Clock, Bomb } from 'lucide-react';
 
 // ==========================================
 // ⚠️ 你的 Firebase 設定
@@ -40,6 +40,20 @@ const RANDOM_RULES = [
   "這回合不交換，大家休息一下",
   "跟現場看起來最貴的禮物交換",
   "拿著禮物深蹲 10 下，然後跟左邊的人換"
+];
+
+// --- 隨機懲罰庫 ---
+const RANDOM_PUNISHMENTS = [
+  "屁股寫字：寫「我是雷包」",
+  "喝特調飲料（苦瓜+可樂+醬油）",
+  "戴著聖誕帽直到派對結束",
+  "模仿貼圖動作讓大家拍照",
+  "向現場每一個人大喊「聖誕快樂」並擁抱",
+  "請全場喝飲料",
+  "用臉衝破保鮮膜",
+  "清唱一首聖誕歌（副歌）",
+  "伏地挺身 20 下",
+  "去隔壁桌/路人說「我是聖誕老公公」"
 ];
 
 // --- 評分說明邏輯 ---
@@ -171,8 +185,13 @@ const App = () => {
 
   // 本地輸入狀態
   const [myRuleInput, setMyRuleInput] = useState('');
+  const [myPunishmentInput, setMyPunishmentInput] = useState('');
   const [myGiftDescription, setMyGiftDescription] = useState('');
   const [myVotes, setMyVotes] = useState({}); // { targetUid: score }
+
+  // 抽獎動畫用
+  const [displayPunishment, setDisplayPunishment] = useState("🎲 準備抽出...");
+  const [isSpinning, setIsSpinning] = useState(false);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -191,14 +210,10 @@ const App = () => {
 
   useEffect(() => {
     const initAuth = async () => {
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        try {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } catch (e) { console.error(e); }
-      } else {
-        try {
-          await signInAnonymously(auth);
-        } catch (error) { console.error(error); }
+      try {
+        await signInAnonymously(auth);
+      } catch (error) {
+        console.error("登入失敗:", error);
       }
     };
     if (auth) {
@@ -242,13 +257,17 @@ const App = () => {
             const myRule = data.rules.find(r => r.uid === user.uid);
             if (myRule && myRule.text) setMyRuleInput(myRule.text);
           }
+          if (data.phase === 'punishment-entry') {
+            const myP = data.punishments ? data.punishments[user.uid] : '';
+            if (myP) setMyPunishmentInput(myP);
+          }
         }
 
         // --- 自動流程 (由房主觸發) ---
         if (data.hostId === user.uid) {
           const participantCount = Object.keys(data.participants).length;
 
-          // 1. 自動進入寫規則：所有人禮物都填了
+          // 1. 禮物登錄完 -> 寫規則
           if (data.phase === 'gift-entry' && participantCount > 1) {
             const finishedGifts = Object.keys(data.gifts || {}).length;
             if (finishedGifts === participantCount) {
@@ -256,21 +275,40 @@ const App = () => {
             }
           }
 
-          // 2. 自動進入遊戲：所有人規則都寫了
+          // 2. 寫完規則 -> 寫懲罰 (NEW)
           if (data.phase === 'rule-entry' && participantCount > 1) {
             const finishedRules = data.rules.filter(r => r.text && r.text.trim() !== "").length;
             if (finishedRules === participantCount) {
+              nextPhase('punishment-entry', data);
+            }
+          }
+
+          // 3. 寫完懲罰 -> 遊戲開始 (NEW)
+          if (data.phase === 'punishment-entry' && participantCount > 1) {
+            const finishedPunishments = Object.keys(data.punishments || {}).length;
+            if (finishedPunishments === participantCount) {
               nextPhase('game-playing', data);
             }
           }
 
-          // 3. 自動進入倒數：所有人投票完畢
+          // 4. 投票完 -> 倒數
           if (data.phase === 'voting' && participantCount > 1) {
             const votedCount = Object.keys(data.votingStatus || {}).length;
             if (votedCount === participantCount) {
               nextPhase('countdown', data);
             }
           }
+        }
+
+        // 當進入 result (榜單) 頁面時，重置抽獎動畫狀態
+        if (data.phase === 'result') {
+          setIsSpinning(false);
+          setDisplayPunishment("🎲 準備抽出...");
+        }
+
+        // 如果資料庫已經有最終懲罰，直接顯示
+        if (data.finalPunishment) {
+          setDisplayPunishment(data.finalPunishment);
         }
 
       } else {
@@ -331,12 +369,13 @@ const App = () => {
           hostId: user.uid,
           phase: 'entry',
           participants: { [user.uid]: safeUserName },
-          gifts: {}, // 新增：禮物資料
+          gifts: {},
           rules: [],
+          punishments: {}, // 新增：懲罰池 {uid: text}
           currentRuleIndex: 0,
-          votingStatus: {}, // 新增：投票狀態
-          ratings: {}, // 新增：評分資料 { targetUid: { voterUid: score } }
-          punishment: "尚未抽出",
+          votingStatus: {},
+          ratings: {},
+          finalPunishment: null,
           createdAt: new Date().toISOString()
         });
       } else {
@@ -383,6 +422,11 @@ const App = () => {
     setMyRuleInput(random);
   };
 
+  const pickRandomPunishmentInput = () => {
+    const random = RANDOM_PUNISHMENTS[Math.floor(Math.random() * RANDOM_PUNISHMENTS.length)];
+    setMyPunishmentInput(random);
+  };
+
   const nextPhase = async (nextPhaseName, currentData = roomData) => {
     if (!currentData) return;
     let updates = { phase: nextPhaseName };
@@ -398,7 +442,7 @@ const App = () => {
       updates.rules = initialRules;
     }
 
-    // 進入遊戲階段初始化
+    // 進入遊戲階段初始化 (洗牌)
     if (nextPhaseName === 'game-playing') {
       const shuffled = [...currentData.rules];
       for (let i = shuffled.length - 1; i > 0; i--) {
@@ -409,9 +453,16 @@ const App = () => {
       updates.currentRuleIndex = 0;
     }
 
-    // 進入投票階段初始化
+    if (nextPhaseName === 'result-entry') {
+      updates.resultMapping = {};
+    }
+
     if (nextPhaseName === 'voting') {
-      // 不需要做太多初始化，ratings 已經在架構中
+      const details = {};
+      Object.keys(currentData.participants).forEach(uid => {
+        details[uid] = { giftName: '', ratings: {} };
+      });
+      updates.matchDetails = details;
     }
 
     await updateRoom(updates);
@@ -433,6 +484,12 @@ const App = () => {
     showToast("規則已送出！等待其他人...");
   };
 
+  const submitPunishmentInput = async () => {
+    if (!myPunishmentInput.trim()) return;
+    await updateRoom({ [`punishments.${user.uid}`]: myPunishmentInput });
+    showToast("惡作劇已送出！嘿嘿嘿...");
+  };
+
   const nextRule = async () => {
     if (roomData.currentRuleIndex < roomData.rules.length - 1) {
       await updateRoom({ currentRuleIndex: increment(1) });
@@ -451,30 +508,40 @@ const App = () => {
 
   const submitVotes = async () => {
     const participantCount = Object.keys(roomData.participants).length;
-    // 檢查是否每個項目都評分了 (扣掉自己)
     if (Object.keys(myVotes).length < participantCount - 1) {
       showToast("請對所有人的禮物進行評分！");
       return;
     }
-
-    // 批次寫入分數
     const updates = { [`votingStatus.${user.uid}`]: true };
     Object.entries(myVotes).forEach(([targetUid, score]) => {
       updates[`ratings.${targetUid}.${user.uid}`] = score;
     });
-
     await updateRoom(updates);
     showToast("評分已送出！等待開票...");
   };
 
-  const drawPunishment = async () => {
-    const punishments = [
-      "屁股寫字：寫「我是雷包」", "喝特調飲料（苦瓜+可樂）", "戴著聖誕帽直到派對結束",
-      "模仿貼圖動作讓大家拍照", "向現場每一個人大喊「聖誕快樂」並擁抱", "請全場喝飲料",
-      "用臉衝破保鮮膜", "清唱一首聖誕歌（副歌）"
-    ];
-    const picked = punishments[Math.floor(Math.random() * punishments.length)];
-    await updateRoom({ punishment: picked });
+  // 抽獎邏輯 (房主執行)
+  const spinPunishment = async () => {
+    setIsSpinning(true);
+
+    // 從大家提交的懲罰中建立池子
+    let pool = Object.values(roomData.punishments || {});
+    // 如果池子空的 (例外防呆)，用預設的
+    if (pool.length === 0) pool = RANDOM_PUNISHMENTS;
+
+    // 前端動畫效果 (假裝在跑)
+    let count = 0;
+    const interval = setInterval(() => {
+      setDisplayPunishment(pool[Math.floor(Math.random() * pool.length)]);
+      count++;
+      if (count > 20) { // 跑 20 次後停下
+        clearInterval(interval);
+        // 決定最終結果並寫入 DB
+        const final = pool[Math.floor(Math.random() * pool.length)];
+        updateRoom({ finalPunishment: final });
+        setIsSpinning(false);
+      }
+    }, 100);
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center bg-slate-900 text-white">載入中...</div>;
@@ -602,7 +669,7 @@ const App = () => {
           </div>
         )}
 
-        {/* --- 階段 1.5: 禮物登錄 (Gift Entry) - NEW --- */}
+        {/* --- 階段 1.5: 禮物登錄 (Gift Entry) --- */}
         {roomData.phase === 'gift-entry' && (
           <div className="animate-fade-in space-y-8">
             <Card>
@@ -668,6 +735,42 @@ const App = () => {
           </div>
         )}
 
+        {/* --- 階段 2.5: 撰寫懲罰 (Punishment Entry) - NEW --- */}
+        {roomData.phase === 'punishment-entry' && (
+          <div className="animate-fade-in space-y-8">
+            <Card>
+              <h2 className="text-2xl font-bold text-center mb-2 flex items-center justify-center gap-2">
+                <Bomb className="text-red-500" size={28} /> 你的惡作劇
+              </h2>
+              <p className="text-sm text-slate-400 text-center mb-8">請提供一個「懲罰」，最後大家一起抽！</p>
+
+              <div className="mb-6">
+                <textarea
+                  className="w-full p-5 bg-slate-800/50 border border-slate-600 rounded-2xl focus:border-red-500 outline-none resize-none text-xl text-white placeholder-slate-600 min-h-[160px]"
+                  placeholder="例：用屁股寫字..."
+                  value={myPunishmentInput}
+                  onChange={e => setMyPunishmentInput(e.target.value)}
+                  disabled={roomData.punishments && roomData.punishments[user.uid]}
+                />
+              </div>
+
+              <div className="flex justify-end mb-8">
+                <button onClick={pickRandomPunishmentInput} disabled={roomData.punishments && roomData.punishments[user.uid]} className="text-sm text-red-300 flex items-center gap-2 hover:text-white transition-colors bg-red-500/10 px-4 py-2 rounded-full border border-red-500/20">
+                  <Shuffle size={16} /> 隨機壞點子
+                </button>
+              </div>
+
+              <Button onClick={submitPunishmentInput} className="w-full text-xl py-5 bg-red-600 hover:bg-red-500 shadow-red-900/50 border-none" disabled={!myPunishmentInput}>
+                {roomData.punishments && roomData.punishments[user.uid] ? "已送出等待中..." : "送出惡作劇"}
+              </Button>
+            </Card>
+
+            <div className="text-center text-slate-500 text-sm">
+              完成進度： {Object.keys(roomData.punishments || {}).length} / {participantList.length}
+            </div>
+          </div>
+        )}
+
         {/* --- 階段 3: 遊戲進行 --- */}
         {roomData.phase === 'game-playing' && (
           <div className="animate-fade-in py-10 flex flex-col items-center">
@@ -703,9 +806,9 @@ const App = () => {
           </div>
         )}
 
-        {/* --- 階段 5: 投票審判 (大幅重構：清單式評分) --- */}
+        {/* --- 階段 5: 投票審判 --- */}
         {roomData.phase === 'voting' && (
-          <div className="animate-fade-in space-y-6 pb-20">
+          <div className="animate-fade-in space-y-6 pb-24">
             {/* 狀態提示 */}
             {roomData.votingStatus && roomData.votingStatus[user.uid] ? (
               <Card className="text-center py-12 border-t-4 border-t-green-500">
@@ -732,7 +835,7 @@ const App = () => {
                   const myScore = myVotes[targetUid] || 1;
 
                   return (
-                    <Card key={targetUid} className="p-5 border border-white/5 relative overflow-hidden">
+                    <Card key={targetUid} className="p-5 border border-white/5 relative overflow-hidden mb-4">
                       <div className="flex justify-between items-start mb-4">
                         <div>
                           <div className="text-sm text-slate-400 mb-1">{targetName} 的禮物</div>
@@ -746,9 +849,9 @@ const App = () => {
                         min="1" max="10"
                         value={myScore}
                         onChange={(e) => handleVoteChange(targetUid, parseInt(e.target.value))}
-                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                        className="w-full h-3 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500"
                       />
-                      <div className="flex justify-between text-xs text-slate-500 mt-2 px-1">
+                      <div className="flex justify-between text-sm text-slate-400 mt-2 px-1 font-bold">
                         <span>1 (天使)</span>
                         <span>5 (普通)</span>
                         <span>10 (雷爆)</span>
@@ -756,6 +859,8 @@ const App = () => {
                     </Card>
                   );
                 })}
+
+                <div className="h-20"></div> {/* Spacer */}
 
                 <div className="fixed bottom-6 left-0 w-full px-4 z-50 flex justify-center">
                   <Button variant="danger" className="w-full max-w-2xl shadow-2xl border-t border-red-400 text-2xl py-6" onClick={submitVotes}>
@@ -767,21 +872,19 @@ const App = () => {
           </div>
         )}
 
-        {/* --- 階段 6: 最終結果 --- */}
+        {/* --- 階段 6: 最終結果 (Leaderboard) --- */}
         {roomData.phase === 'result' && (
           <div className="animate-fade-in space-y-8 pb-20">
             <div className="text-center mb-10">
               <h2 className="text-5xl font-black text-yellow-400 drop-shadow-xl mb-3 flex items-center justify-center gap-3">
-                <Star fill="currentColor" size={40} /> 雷王誕生 <Star fill="currentColor" size={40} />
+                <Star fill="currentColor" size={40} /> 本日最雷王誕生 <Star fill="currentColor" size={40} />
               </h2>
               <p className="text-slate-400 text-lg">恭喜以下得主獲得大家的怨念</p>
             </div>
 
             {participantList.map(([uid]) => {
-              // 計算總分
               const userRatings = roomData.ratings ? roomData.ratings[uid] : {};
               const totalScore = Object.values(userRatings || {}).reduce((a, b) => a + b, 0);
-
               return {
                 uid,
                 totalScore,
@@ -803,18 +906,63 @@ const App = () => {
               </div>
             ))}
 
-            <Card className="bg-red-950/50 border-red-900/50 text-center mt-10 backdrop-blur-sm py-10">
-              <h3 className="text-2xl font-bold text-red-400 mb-6 flex justify-center items-center gap-3"><Skull size={28} /> 懲罰內容</h3>
-              <div className="text-3xl md:text-4xl font-black text-white mb-8 px-6 leading-tight bg-black/20 py-6 rounded-2xl border border-white/5">
-                {roomData.punishment}
+            {isHost && (
+              <div className="mt-12 text-center">
+                <Button variant="danger" size="lg" onClick={() => nextPhase('punishment-reveal')} className="w-full max-w-md mx-auto text-2xl py-6 shadow-2xl animate-bounce">
+                  ☠️ 進入懲罰環節 ☠️
+                </Button>
               </div>
-              {isHost && (<Button variant="neutral" size="lg" onClick={drawPunishment} className="mx-auto bg-slate-800 text-slate-300 border-slate-700"><Zap size={20} /> 換一個懲罰</Button>)}
-            </Card>
+            )}
+          </div>
+        )}
 
-            <div className="text-center mt-12">
-              <Button variant="secondary" onClick={leaveRoom} className="bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white px-10">
-                <LogOut size={20} /> 離開房間
-              </Button>
+        {/* --- 階段 7: 懲罰揭曉 (Punishment Reveal) - NEW --- */}
+        {roomData.phase === 'punishment-reveal' && (
+          <div className="animate-fade-in space-y-8 pb-20 flex flex-col h-full">
+            {/* 置頂：雷王資訊 */}
+            {(() => {
+              // 找出最高分
+              const loser = participantList.map(([uid]) => {
+                const userRatings = roomData.ratings ? roomData.ratings[uid] : {};
+                const totalScore = Object.values(userRatings || {}).reduce((a, b) => a + b, 0);
+                return { uid, totalScore, name: roomData.participants[uid] };
+              }).sort((a, b) => b.totalScore - a.totalScore)[0];
+
+              return (
+                <div className="text-center py-6 border-b border-white/10 bg-black/20">
+                  <p className="text-slate-400 text-sm mb-2 uppercase tracking-widest">The Loser is</p>
+                  <h2 className="text-6xl font-black text-red-500 drop-shadow-[0_0_15px_rgba(239,68,68,0.5)] mb-2">{loser.name}</h2>
+                  <div className="text-xl text-white font-bold bg-red-600 inline-block px-4 py-1 rounded-full">
+                    {loser.totalScore} 分
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="flex-1 flex flex-col items-center justify-center p-4">
+              <h3 className="text-2xl font-bold text-white mb-8 flex items-center gap-3">
+                <Skull size={32} className="text-slate-400" /> 命運的懲罰 <Skull size={32} className="text-slate-400" />
+              </h3>
+
+              <div className={`text-4xl md:text-5xl font-black text-center leading-tight bg-slate-900 border-2 ${isSpinning ? 'border-yellow-500 text-yellow-400 animate-pulse' : 'border-red-600 text-white'} p-10 rounded-3xl shadow-2xl max-w-lg w-full min-h-[200px] flex items-center justify-center transition-all duration-300`}>
+                {displayPunishment}
+              </div>
+
+              {isHost && (
+                <div className="mt-12 w-full max-w-xs space-y-4">
+                  <Button variant="neutral" size="lg" onClick={spinPunishment} className="w-full text-xl py-5" disabled={isSpinning}>
+                    {isSpinning ? "抽選中..." : "🎲 抽取懲罰"}
+                  </Button>
+
+                  <Button variant="secondary" onClick={leaveRoom} className="w-full bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white mt-8">
+                    <LogOut size={20} /> 結束遊戲
+                  </Button>
+                </div>
+              )}
+
+              {!isHost && (
+                <div className="mt-12 text-slate-500">等待抽出懲罰...</div>
+              )}
             </div>
           </div>
         )}
