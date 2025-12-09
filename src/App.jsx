@@ -79,7 +79,7 @@ const Toast = ({ message, onClose }) => {
   );
 };
 
-// --- 輪盤元件 (Roulette) - 修正：同步版 ---
+// --- 輪盤元件 (Roulette) - 絕對同步版 ---
 const RouletteWheel = ({ items, targetItem, isSpinning, className }) => {
   const [rotation, setRotation] = useState(0);
 
@@ -94,6 +94,7 @@ const RouletteWheel = ({ items, targetItem, isSpinning, className }) => {
       const centerAngle = (targetIndex * segmentAngle) + (segmentAngle / 2);
 
       // 基礎旋轉：多轉10圈 + 對齊角度
+      // 移除隨機偏移，確保精準對齊，避免 A/B 兩端顯示不同
       const baseRotation = 3600 + (360 - centerAngle);
 
       setRotation(baseRotation);
@@ -104,6 +105,7 @@ const RouletteWheel = ({ items, targetItem, isSpinning, className }) => {
 
   return (
     <div className={`relative w-80 h-80 md:w-[500px] md:h-[500px] mx-auto ${className}`}>
+      {/* 指針 */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-4 z-20 filter drop-shadow-lg">
         <ChevronDown size={60} className="text-white fill-white stroke-[4px] stroke-slate-900" />
       </div>
@@ -259,12 +261,13 @@ const App = () => {
     setToast(msg);
   };
 
-  // 🔒 確保懲罰池在所有客戶端排序一致 (Memoized & Sorted)
-  // 修正：使用預設 sort() (ASCII) 確保跨平台排序一致性，避免 localeCompare 的差異
+  // 🔒 確保懲罰池在所有客戶端排序一致 (使用 ASCII sort)
+  // 修正：完全不使用 localeCompare，確保跨平台一致性
   const punishmentPool = useMemo(() => {
     const punishments = roomData?.punishments ? Object.values(roomData.punishments) : [];
-    if (punishments.length === 0) return [...RANDOM_PUNISHMENTS].sort();
-    return punishments.sort();
+    const pool = punishments.length === 0 ? [...RANDOM_PUNISHMENTS] : punishments;
+    // 強制使用最原始的 sort() (ASCII 碼排序)，確保全世界一致
+    return pool.sort();
   }, [roomData?.punishments]);
 
   if (!isConfigured) {
@@ -333,11 +336,11 @@ const App = () => {
         }
 
         // 處理抽獎動畫 (只在第一次開獎時執行)
-        if (data.isSpinning && !showFinalResult) {
+        // 修正：不依賴 showFinalResult 狀態，完全依賴 DB
+        if (data.isSpinning && !hasTriggeredAnimation.current) {
+          hasTriggeredAnimation.current = true;
           setShowFinalResult(false);
           const interval = setInterval(() => {
-            // 使用 punishmentPool 確保文字跳動內容也一致
-            // 這裡我們重新計算 pool 因為無法直接從 hook 外部拿 useMemo 的值
             let p = data.punishments ? Object.values(data.punishments) : RANDOM_PUNISHMENTS;
             setRandomText(p[Math.floor(Math.random() * p.length)]);
           }, 100);
@@ -391,24 +394,6 @@ const App = () => {
     return () => unsubscribe();
   }, [user, roomId]);
 
-  // 修正：抽獎動畫邏輯獨立出來
-  useEffect(() => {
-    if (!roomData) return;
-
-    if (roomData.isSpinning && !hasTriggeredAnimation.current) {
-      hasTriggeredAnimation.current = true;
-      setShowFinalResult(false);
-      // 動畫由上面的 onSnapshot 觸發，這裡主要是鎖定狀態
-    }
-
-    if (!roomData.isSpinning && !roomData.finalPunishment) {
-      hasTriggeredAnimation.current = false;
-      setShowFinalResult(false);
-      setRandomText("🎲 準備抽出...");
-    }
-  }, [roomData?.isSpinning, roomData?.finalPunishment]);
-
-
   // --- 動作函式 ---
 
   const handleLogout = async () => {
@@ -431,6 +416,7 @@ const App = () => {
       showToast("房間已清除 👋");
     } else {
       let updates = { participants: newParticipants };
+      // 主持人離開不轉移權限
       await updateDoc(roomRef, updates);
     }
 
@@ -639,11 +625,9 @@ const App = () => {
 
   // 抽獎邏輯 (主持人執行)
   const spinPunishment = async () => {
-    // 1. 使用跟前端 useMemo 一致的排序邏輯取得清單
-    // 這裡直接使用 punishmentPool (前端已排序) 傳過去其實最穩，但為了不依賴前端狀態，我們在送出前再 sort 一次
     let pool = Object.values(roomData.punishments || {});
     if (pool.length === 0) pool = RANDOM_PUNISHMENTS;
-    // ⚠️ 關鍵：強制排序，確保與前端顯示順序一致
+    // ⚠️ 關鍵：強制使用 ASCII 排序，確保與前端 punishmentPool 一致
     pool.sort();
 
     const final = pool[Math.floor(Math.random() * pool.length)];
@@ -730,8 +714,10 @@ const App = () => {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <div className="bg-purple-600 px-2 py-0.5 rounded text-xs font-bold shadow">Room {roomId}</div>
-            <div className="text-xs text-slate-400 flex items-center gap-1 bg-slate-800 px-2 py-0.5 rounded-full">
-              <Users size={12} /> {participantList.length}
+            <div className="flex flex-col">
+              <span className="font-bold truncate max-w-[140px] text-slate-200 text-lg leading-none mb-0.5">{userName}</span>
+              {/* 顯示我的號碼 */}
+              {myNumber && <span className="text-xs text-yellow-400 font-bold flex items-center gap-0.5"><Hash size={10} /> 你是 {myNumber} 號</span>}
             </div>
           </div>
 
