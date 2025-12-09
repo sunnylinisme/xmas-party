@@ -84,46 +84,40 @@ const Toast = ({ message, onClose }) => {
   );
 };
 
-// --- 輪盤元件 (Roulette) ---
+// --- 輪盤元件 (Roulette) - 修正：響應式大小 + 無限旋轉動畫 ---
 const RouletteWheel = ({ items, targetItem, isSpinning, className }) => {
   const [rotation, setRotation] = useState(0);
 
   useEffect(() => {
-    if (targetItem && items.length > 0) {
+    // 只有當「停止旋轉」且「有結果」時，才計算最終角度
+    if (!isSpinning && targetItem && items.length > 0) {
       const targetIndex = items.indexOf(targetItem);
-      if (targetIndex === -1) return; // 防呆
+      if (targetIndex === -1) return;
 
       const segmentAngle = 360 / items.length;
-
-      // 計算目標中心點的角度 (以0度為起點)
       const centerAngle = (targetIndex * segmentAngle) + (segmentAngle / 2);
-
-      // 基礎旋轉：多轉10圈 + 對齊角度
-      // ⚠️ 移除隨機偏移，確保精準對齊，避免 A/B 兩端顯示不同
+      // 這裡不需要多轉圈，因為 CSS animation 已經轉了很多圈
+      // 我們只需要設定「最終停留」的角度 (需抵銷 CSS animation 的結束狀態，或者直接設定 transform)
+      // 為了簡單，我們計算一個絕對角度
       const baseRotation = 3600 + (360 - centerAngle);
-
       setRotation(baseRotation);
-    } else if (isSpinning) {
-      // 轉動中但還沒結果時，持續空轉 (視覺效果)
-      // 這裡簡單處理：只要 isSpinning 為真，就讓它一直轉，等到有結果會觸發上面的 useEffect 覆蓋角度
-      // 實際上上面的邏輯已經足夠，因為 isSpinning 時 targetItem 通常為 null 或舊值
-      // 為了簡化，我們讓它保持在上次的角度或 0，等待結果出爐瞬間轉過去即可
     }
   }, [targetItem, items, isSpinning]);
 
   const colors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7', '#ec4899', '#6366f1'];
 
   return (
-    <div className={`relative w-80 h-80 md:w-[500px] md:h-[500px] mx-auto ${className}`}>
+    // 使用 vmin 或百分比來控制大小，確保在手機和電腦都不會爆版
+    <div className={`relative w-[70vmin] h-[70vmin] max-w-[400px] max-h-[400px] mx-auto my-2 ${className}`}>
       {/* 指針 */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-4 z-20 filter drop-shadow-lg">
-        <ChevronDown size={60} className="text-white fill-white stroke-[4px] stroke-slate-900" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-2 z-20 filter drop-shadow-lg">
+        <ChevronDown size={40} className="text-white fill-white stroke-[4px] stroke-slate-900" />
       </div>
 
       <div
-        className="w-full h-full rounded-full border-8 border-slate-800 shadow-2xl relative overflow-hidden transition-transform duration-[5000ms] cubic-bezier(0.15, 0.85, 0.15, 1)"
+        className={`w-full h-full rounded-full border-4 md:border-8 border-slate-800 shadow-2xl relative overflow-hidden ${isSpinning ? 'animate-spin-fast' : 'transition-transform duration-[3000ms] cubic-bezier(0.1, 0, 0.1, 1)'}`}
         style={{
-          transform: `rotate(${rotation}deg)`,
+          transform: isSpinning ? 'none' : `rotate(${rotation}deg)`,
           background: `conic-gradient(${items.map((_, i) => `${colors[i % colors.length]} ${i * (100 / items.length)}% ${(i + 1) * (100 / items.length)}%`).join(', ')
             })`
         }}
@@ -136,15 +130,16 @@ const RouletteWheel = ({ items, targetItem, isSpinning, className }) => {
               className="absolute top-1/2 left-1/2 w-1/2 h-1 origin-left flex items-center"
               style={{ transform: `rotate(${angle - 90}deg)` }}
             >
-              <div className="pl-12 text-white font-bold text-sm md:text-xl truncate w-32 md:w-56 text-shadow" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>
+              {/* 調整文字位置與大小，避免超出 */}
+              <div className="pl-8 md:pl-12 text-white font-bold text-xs md:text-base truncate w-24 md:w-36 text-shadow" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>
                 {item}
               </div>
             </div>
           )
         })}
       </div>
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 bg-slate-800 rounded-full border-4 border-slate-600 flex items-center justify-center shadow-xl z-10">
-        <Skull className="text-slate-400" size={32} />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-slate-800 rounded-full border-4 border-slate-600 flex items-center justify-center shadow-xl z-10">
+        <Skull className="text-slate-400" size={24} />
       </div>
     </div>
   );
@@ -259,6 +254,10 @@ const App = () => {
 
   // 抽獎文字跳動狀態 (Client side animation)
   const [randomText, setRandomText] = useState("🎲 準備抽出...");
+  const [showFinalResult, setShowFinalResult] = useState(false);
+
+  // 鎖定動畫狀態，避免重複觸發
+  const hasTriggeredAnimation = useRef(false);
 
   // 我的號碼
   const myNumber = roomData?.participantNumbers?.[user?.uid];
@@ -268,8 +267,6 @@ const App = () => {
   };
 
   // 🔒 確保懲罰池在所有客戶端排序一致 (使用 strict sort)
-  // 修正：完全不使用 localeCompare，使用預設排序確保跨平台一致性
-  // 並且使用 [...array] 進行淺拷貝，避免修改到原始參考
   const punishmentPool = useMemo(() => {
     const punishments = roomData?.punishments ? Object.values(roomData.punishments) : [];
     const pool = punishments.length === 0 ? [...RANDOM_PUNISHMENTS] : punishments;
@@ -342,23 +339,33 @@ const App = () => {
           }
         }
 
-        // --- 抽獎文字跳動邏輯 (完全依賴 isSpinning 狀態) ---
-        // 只有當「正在轉」且「還沒有結果」的時候，才會跳動文字
-        if (data.isSpinning) {
-          // 計算一個循環索引，確保每個人看到的跳動頻率雖然不同步但邏輯一致
-          // 但為了簡單，這裡用隨機跳動沒關係，因為這是「過程」，「結果」對就好
-          // 不過為了呼應您的要求，我們讓它依序跳動
-          const interval = setInterval(() => {
-            const pool = strictSort(data.punishments ? Object.values(data.punishments) : RANDOM_PUNISHMENTS);
-            // 隨機選一個顯示，營造緊張感 (這裡不需要同步，只是特效)
-            setRandomText(pool[Math.floor(Math.random() * pool.length)]);
-          }, 80);
+        // 處理抽獎動畫 (只在第一次開獎時執行)
+        if (data.isSpinning && !hasTriggeredAnimation.current) {
+          hasTriggeredAnimation.current = true;
+          setShowFinalResult(false);
 
-          return () => clearInterval(interval);
-        } else if (data.finalPunishment) {
-          // 停止時，直接顯示結果 (不做任何事，渲染層會處理)
-        } else {
-          setRandomText("🎲 準備抽出...");
+          let index = 0;
+          const interval = setInterval(() => {
+            let pool = data.punishments ? Object.values(data.punishments) : RANDOM_PUNISHMENTS;
+            pool = strictSort(pool);
+            setRandomText(pool[index % pool.length]);
+            index++;
+          }, 100);
+
+          const timeout = setTimeout(() => {
+            clearInterval(interval);
+            setShowFinalResult(true);
+          }, 5000);
+
+          return () => {
+            clearInterval(interval);
+            clearTimeout(timeout);
+          }
+        }
+
+        if (data.finalPunishment && data.isSpinning && !showFinalResult) {
+          setShowFinalResult(true);
+          hasTriggeredAnimation.current = true;
         }
 
         // --- 自動流程 (由主持人觸發) ---
@@ -407,15 +414,27 @@ const App = () => {
     if (!confirm("確定要離開房間嗎？")) return;
 
     const roomRef = doc(db, 'xmas_rooms', `room_${roomId}`);
-    const newParticipants = { ...roomData.participants };
+    // 從本地先抓取最新名單，避免併發問題
+    const currentDoc = await getDoc(roomRef);
+    if (!currentDoc.exists()) {
+      // 房間已經不存在
+      localStorage.removeItem('xmas_last_room_id');
+      window.location.reload();
+      return;
+    }
+
+    const currentData = currentDoc.data();
+    const newParticipants = { ...currentData.participants };
     delete newParticipants[user.uid];
 
     if (Object.keys(newParticipants).length === 0) {
+      // 如果是最後一人，直接刪除房間
       await deleteDoc(roomRef);
       showToast("房間已清除 👋");
     } else {
+      // 更新名單
       let updates = { participants: newParticipants };
-      // 主持人離開不轉移權限
+      // 如果離開的是主持人，看要不要轉移權限，這裡暫時不轉移
       await updateDoc(roomRef, updates);
     }
 
@@ -624,21 +643,17 @@ const App = () => {
 
   // 抽獎邏輯 (主持人執行)
   const spinPunishment = async () => {
-    // 1. 重置 (為了確保可以重複抽，如果有需要的話)
-    await updateRoom({ isSpinning: true, finalPunishment: null });
+    let pool = Object.values(roomData.punishments || {});
+    if (pool.length === 0) pool = RANDOM_PUNISHMENTS;
+    // ⚠️ 關鍵：強制使用 ASCII 排序，確保與前端 punishmentPool 一致
+    pool = strictSort(pool);
 
-    // 2. 延遲 4 秒後寫入結果 (模擬轉動)
-    setTimeout(async () => {
-      let pool = Object.values(roomData.punishments || {});
-      if (pool.length === 0) pool = RANDOM_PUNISHMENTS;
-      pool = strictSort(pool);
-      const final = pool[Math.floor(Math.random() * pool.length)];
+    const final = pool[Math.floor(Math.random() * pool.length)];
 
-      await updateRoom({
-        finalPunishment: final,
-        isSpinning: false
-      });
-    }, 4000);
+    await updateRoom({
+      finalPunishment: final,
+      isSpinning: true
+    });
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center bg-slate-900 text-white">載入中...</div>;
@@ -1037,7 +1052,7 @@ const App = () => {
           </div>
         )}
 
-        {/* --- 階段 7: 懲罰揭曉 (Compact Layout) --- */}
+        {/* --- 階段 7: 懲罰揭曉 (Compact Layout + Responsive) --- */}
         {roomData.phase === 'punishment-reveal' && (
           <div className="animate-fade-in flex flex-col h-[calc(100vh-20px)] w-full max-w-md mx-auto relative overflow-hidden">
 
@@ -1047,10 +1062,10 @@ const App = () => {
               if (!loser) return null;
 
               return (
-                <div className="shrink-0 text-center py-4 bg-slate-900/50 border-b border-white/10 relative z-20">
+                <div className="shrink-0 text-center py-2 bg-slate-900/50 border-b border-white/10 relative z-20">
                   <p className="text-slate-500 text-xs uppercase tracking-[0.2em] mb-1">The Loser is</p>
                   <div className="flex flex-col items-center gap-1">
-                    <h2 className="text-4xl font-black text-red-500 drop-shadow-[0_0_15px_rgba(239,68,68,0.6)] leading-none">{loser.name}</h2>
+                    <h2 className="text-3xl md:text-4xl font-black text-red-500 drop-shadow-[0_0_15px_rgba(239,68,68,0.6)] leading-none">{loser.name}</h2>
                     <span className="text-sm font-bold text-white bg-red-600 px-3 py-0.5 rounded-full shadow-lg">{loser.totalScore} 分</span>
                   </div>
                 </div>
@@ -1065,20 +1080,22 @@ const App = () => {
                 </h3>
               </div>
 
-              {/* 輪盤本體 */}
-              <RouletteWheel
-                items={punishmentPool}
-                targetItem={roomData.finalPunishment}
-                isSpinning={roomData.isSpinning}
-              />
+              {/* 輪盤縮放容器 (使用 vmin 或 % 來控制) */}
+              <div className="scale-75 md:scale-90 origin-center transition-transform">
+                <RouletteWheel
+                  items={punishmentPool}
+                  targetItem={roomData.finalPunishment}
+                  isSpinning={roomData.isSpinning}
+                />
+              </div>
             </div>
 
             {/* 3. 結果與控制 (Fixed Bottom) */}
             <div className="shrink-0 p-4 w-full bg-slate-900/90 border-t border-white/10 backdrop-blur-md relative z-30 pb-safe">
 
-              {/* 結果顯示區 (有結果才顯示，避免佔位) */}
-              <div className="min-h-[80px] flex items-center justify-center mb-2">
-                <div className={`text-yellow-400 font-black text-2xl text-center bg-black/40 border-2 ${roomData.finalPunishment && !roomData.isSpinning ? 'border-yellow-500/80' : 'border-slate-700/50'} p-3 rounded-xl shadow-xl leading-tight w-full transition-all`}>
+              {/* 結果顯示區 */}
+              <div className="min-h-[60px] flex items-center justify-center mb-2">
+                <div className={`text-yellow-400 font-black text-xl md:text-2xl text-center bg-black/40 border-2 ${roomData.finalPunishment && !roomData.isSpinning ? 'border-yellow-500/80' : 'border-slate-700/50'} p-3 rounded-xl shadow-xl leading-tight w-full transition-all`}>
                   {roomData.isSpinning ? "🎲 抽選中..." : (roomData.finalPunishment || "等待主持人啟動...")}
                 </div>
               </div>
@@ -1113,6 +1130,9 @@ const App = () => {
         @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } 
         @keyframes fade-in-down { from { opacity: 0; transform: translateY(-20px) translateX(-50%); } to { opacity: 1; transform: translateY(0) translateX(-50%); } }
         @keyframes fade-in-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes spin-fast { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        
+        .animate-spin-fast { animation: spin-fast 0.5s linear infinite; }
         .animate-fade-in { animation: fade-in 0.5s ease-out forwards; } 
         .animate-fade-in-down { animation: fade-in-down 0.5s ease-out forwards; }
         .animate-fade-in-up { animation: fade-in-up 0.4s ease-out forwards; }
