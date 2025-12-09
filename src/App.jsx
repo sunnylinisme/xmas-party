@@ -2,10 +2,10 @@ import React, { useState, useEffect, useRef, memo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, getDoc, deleteDoc, deleteField, increment } from 'firebase/firestore';
-import { Gift, Users, ArrowRight, Zap, Skull, Play, Edit3, AlertTriangle, LogIn, Share2, Link as LinkIcon, RotateCcw, Shuffle, Star, Save, X, LogOut, Info } from 'lucide-react';
+import { Gift, Users, ArrowRight, Zap, Skull, Play, Edit3, AlertTriangle, LogIn, Share2, Link as LinkIcon, RotateCcw, Shuffle, Star, Save, X, LogOut, Info, CheckCircle, Clock } from 'lucide-react';
 
 // ==========================================
-// ⚠️ 你的 Firebase 設定 (已整合)
+// ⚠️ 你的 Firebase 設定
 // ==========================================
 const firebaseConfig = {
   apiKey: "AIzaSyDxqdu-Gbd9ZnMCccuUSyDkZ9_dxgIwHJ0",
@@ -44,12 +44,10 @@ const RANDOM_RULES = [
 
 // --- 評分說明邏輯 ---
 const getRatingLabel = (score) => {
-  // 這是顯示總分用的評語
-  const avg = score;
-  if (avg <= 10) return { text: "😇 天使好禮", color: "text-green-400" };
-  if (avg <= 20) return { text: "🙂 還算實用", color: "text-blue-400" };
-  if (avg <= 30) return { text: "😐 微妙...不好說", color: "text-yellow-400" };
-  if (avg <= 40) return { text: "🤔 有點雷喔", color: "text-orange-400" };
+  if (score <= 10) return { text: "😇 天使好禮", color: "text-green-400" };
+  if (score <= 20) return { text: "🙂 還算實用", color: "text-blue-400" };
+  if (score <= 30) return { text: "😐 微妙...不好說", color: "text-yellow-400" };
+  if (score <= 40) return { text: "🤔 有點雷喔", color: "text-orange-400" };
   return { text: "☠️ 恭喜! 超~級~雷~", color: "text-red-500 font-black animate-pulse" };
 };
 
@@ -138,75 +136,26 @@ const Button = ({ onClick, children, variant = 'primary', className = "", disabl
   );
 };
 
-// --- 子元件：投票卡片 ---
-const VotingItem = ({ receiverUid, receiverName, roomData, vote, submitGiftDescription, currentUserId }) => {
-  const giverUid = roomData.resultMapping[receiverUid];
-  const giverName = roomData.participants[giverUid] || "未知";
-  const details = roomData.matchDetails[receiverUid] || { giftName: '', ratings: {} };
-
-  // 取得評分資料
-  const ratings = details.ratings || {};
-
-  // 我的評分 (如果還沒評過，預設 1 分)
-  const myRating = ratings[currentUserId] || 1;
-
-  const [tempGiftName, setTempGiftName] = useState(details.giftName);
-  const [isSaving, setIsSaving] = useState(false);
+// --- 子元件：倒數計時器 ---
+const CountdownDisplay = ({ onFinish }) => {
+  const [count, setCount] = useState(10);
 
   useEffect(() => {
-    if (details.giftName && !tempGiftName) {
-      setTempGiftName(details.giftName);
+    if (count <= 0) {
+      onFinish();
+      return;
     }
-  }, [details.giftName]);
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    await submitGiftDescription(receiverUid, tempGiftName);
-    setIsSaving(false);
-  };
+    const timer = setTimeout(() => setCount(c => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [count, onFinish]);
 
   return (
-    <Card className="p-5 mb-4 border border-white/5">
-      <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-3">
-        <div className="text-lg text-slate-300">
-          🎁 <span className="font-bold text-white text-xl">{giverName}</span> 送給 {receiverName}
-        </div>
-        {/* 隱藏總分顯示，改為問號 */}
-        <div className="flex flex-col items-end">
-          <span className="text-5xl font-black text-slate-500 animate-pulse">?</span>
-          <span className="text-xs text-slate-500 uppercase tracking-widest">等待開票</span>
-        </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md">
+      <div className="text-center animate-pulse">
+        <div className="text-yellow-400 text-4xl mb-4 font-bold">即將揭曉</div>
+        <div className="text-[15rem] font-black text-white leading-none">{count}</div>
       </div>
-
-      <div className="flex gap-2 mb-5">
-        <input
-          type="text"
-          className="flex-1 bg-slate-950/50 border-b-2 border-slate-600 p-3 text-lg outline-none focus:border-purple-500 text-white placeholder-slate-600 transition-colors rounded-t-lg"
-          placeholder="輸入禮物內容..."
-          value={tempGiftName}
-          onChange={(e) => setTempGiftName(e.target.value)}
-        />
-        <button
-          onClick={handleSave}
-          className="bg-slate-700 hover:bg-purple-600 text-white px-4 rounded-lg flex items-center gap-1 transition-colors"
-          disabled={isSaving}
-        >
-          <Save size={20} />
-        </button>
-      </div>
-
-      {/* 個人評分區 */}
-      <div className="bg-slate-950/40 p-3 rounded-xl">
-        <div className="flex justify-between items-center mb-2">
-          <span className="text-sm text-slate-400 flex items-center gap-1"><Star size={14} className="text-yellow-500" /> 你的評分</span>
-          <span className="text-2xl font-bold text-yellow-400">{myRating} <span className="text-sm font-normal text-slate-500">分</span></span>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => vote(receiverUid, -1)} className="flex-1 h-12 rounded-lg bg-slate-700 text-slate-300 flex items-center justify-center hover:bg-slate-600 text-2xl font-bold active:scale-95">-</button>
-          <button onClick={() => vote(receiverUid, 1)} className="flex-1 h-12 rounded-lg bg-red-600 text-white flex items-center justify-center hover:bg-red-500 active:scale-95 transition-transform shadow-lg shadow-red-900/50 text-2xl font-bold">+</button>
-        </div>
-      </div>
-    </Card>
+    </div>
   );
 };
 
@@ -222,7 +171,8 @@ const App = () => {
 
   // 本地輸入狀態
   const [myRuleInput, setMyRuleInput] = useState('');
-  const [myGiftGiver, setMyGiftGiver] = useState('');
+  const [myGiftDescription, setMyGiftDescription] = useState('');
+  const [myVotes, setMyVotes] = useState({}); // { targetUid: score }
 
   const showToast = (msg) => {
     setToast(msg);
@@ -283,6 +233,11 @@ const App = () => {
           setIsInRoom(true);
           setUserName(data.participants[user.uid]);
 
+          // 還原輸入狀態
+          if (data.phase === 'gift-entry') {
+            const myGift = data.gifts ? data.gifts[user.uid] : '';
+            if (myGift) setMyGiftDescription(myGift);
+          }
           if (data.phase === 'rule-entry') {
             const myRule = data.rules.find(r => r.uid === user.uid);
             if (myRule && myRule.text) setMyRuleInput(myRule.text);
@@ -293,7 +248,15 @@ const App = () => {
         if (data.hostId === user.uid) {
           const participantCount = Object.keys(data.participants).length;
 
-          // 1. 自動進入遊戲
+          // 1. 自動進入寫規則：所有人禮物都填了
+          if (data.phase === 'gift-entry' && participantCount > 1) {
+            const finishedGifts = Object.keys(data.gifts || {}).length;
+            if (finishedGifts === participantCount) {
+              nextPhase('rule-entry', data);
+            }
+          }
+
+          // 2. 自動進入遊戲：所有人規則都寫了
           if (data.phase === 'rule-entry' && participantCount > 1) {
             const finishedRules = data.rules.filter(r => r.text && r.text.trim() !== "").length;
             if (finishedRules === participantCount) {
@@ -301,11 +264,11 @@ const App = () => {
             }
           }
 
-          // 2. 自動進入投票
-          if (data.phase === 'result-entry' && participantCount > 1) {
-            const reportedCount = Object.keys(data.resultMapping || {}).length;
-            if (reportedCount === participantCount) {
-              nextPhase('voting', data);
+          // 3. 自動進入倒數：所有人投票完畢
+          if (data.phase === 'voting' && participantCount > 1) {
+            const votedCount = Object.keys(data.votingStatus || {}).length;
+            if (votedCount === participantCount) {
+              nextPhase('countdown', data);
             }
           }
         }
@@ -368,10 +331,11 @@ const App = () => {
           hostId: user.uid,
           phase: 'entry',
           participants: { [user.uid]: safeUserName },
+          gifts: {}, // 新增：禮物資料
           rules: [],
           currentRuleIndex: 0,
-          resultMapping: {},
-          matchDetails: {},
+          votingStatus: {}, // 新增：投票狀態
+          ratings: {}, // 新增：評分資料 { targetUid: { voterUid: score } }
           punishment: "尚未抽出",
           createdAt: new Date().toISOString()
         });
@@ -423,7 +387,8 @@ const App = () => {
     if (!currentData) return;
     let updates = { phase: nextPhaseName };
 
-    if (nextPhaseName === 'rule-entry' && currentData.phase === 'entry') {
+    // 進入規則階段初始化
+    if (nextPhaseName === 'rule-entry') {
       const pIds = Object.keys(currentData.participants);
       const initialRules = pIds.map(uid => ({
         uid,
@@ -433,7 +398,8 @@ const App = () => {
       updates.rules = initialRules;
     }
 
-    if (nextPhaseName === 'game-playing' && currentData.phase === 'rule-entry') {
+    // 進入遊戲階段初始化
+    if (nextPhaseName === 'game-playing') {
       const shuffled = [...currentData.rules];
       for (let i = shuffled.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -443,19 +409,18 @@ const App = () => {
       updates.currentRuleIndex = 0;
     }
 
-    if (nextPhaseName === 'result-entry') {
-      updates.resultMapping = {};
-    }
-
+    // 進入投票階段初始化
     if (nextPhaseName === 'voting') {
-      const details = {};
-      Object.keys(currentData.participants).forEach(uid => {
-        details[uid] = { giftName: '', ratings: {} };
-      });
-      updates.matchDetails = details;
+      // 不需要做太多初始化，ratings 已經在架構中
     }
 
     await updateRoom(updates);
+  };
+
+  const submitGift = async () => {
+    if (!myGiftDescription.trim()) return;
+    await updateRoom({ [`gifts.${user.uid}`]: myGiftDescription });
+    showToast("禮物已登錄！等待其他人...");
   };
 
   const submitRule = async () => {
@@ -472,27 +437,34 @@ const App = () => {
     if (roomData.currentRuleIndex < roomData.rules.length - 1) {
       await updateRoom({ currentRuleIndex: increment(1) });
     } else {
-      nextPhase('result-entry');
+      // 遊戲結束，直接進入投票
+      nextPhase('voting');
     }
   };
 
-  const submitResult = async () => {
-    if (!myGiftGiver) return;
-    await updateRoom({ [`resultMapping.${user.uid}`]: myGiftGiver });
-    showToast("已回報！等待全員完成...");
+  const handleVoteChange = (targetUid, score) => {
+    setMyVotes(prev => ({
+      ...prev,
+      [targetUid]: score
+    }));
   };
 
-  const submitGiftDescription = async (targetUid, text) => {
-    await updateRoom({ [`matchDetails.${targetUid}.giftName`]: text });
-    showToast("儲存成功");
-  };
+  const submitVotes = async () => {
+    const participantCount = Object.keys(roomData.participants).length;
+    // 檢查是否每個項目都評分了 (扣掉自己)
+    if (Object.keys(myVotes).length < participantCount - 1) {
+      showToast("請對所有人的禮物進行評分！");
+      return;
+    }
 
-  const vote = async (targetUid, delta) => {
-    const currentDetails = roomData.matchDetails[targetUid] || {};
-    const currentRatings = currentDetails.ratings || {};
-    const myCurrentScore = currentRatings[user.uid] || 1;
-    let newScore = Math.max(1, Math.min(10, myCurrentScore + delta));
-    await updateRoom({ [`matchDetails.${targetUid}.ratings.${user.uid}`]: newScore });
+    // 批次寫入分數
+    const updates = { [`votingStatus.${user.uid}`]: true };
+    Object.entries(myVotes).forEach(([targetUid, score]) => {
+      updates[`ratings.${targetUid}.${user.uid}`] = score;
+    });
+
+    await updateRoom(updates);
+    showToast("評分已送出！等待開票...");
   };
 
   const drawPunishment = async () => {
@@ -569,6 +541,12 @@ const App = () => {
       <SnowBackground />
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
 
+      {/* 10秒倒數遮罩 */}
+      {roomData.phase === 'countdown' && (
+        <CountdownDisplay onFinish={() => isHost && nextPhase('result')} />
+      )}
+
+      {/* 頂部資訊列 */}
       <div className="bg-slate-900/90 backdrop-blur-md border-b border-white/5 sticky top-0 z-50 shadow-lg p-4">
         <div className="flex justify-between items-center mb-3">
           <div className="flex items-center gap-3">
@@ -592,11 +570,12 @@ const App = () => {
 
       <main className="relative z-10 max-w-3xl mx-auto p-4 flex flex-col gap-8 mt-4">
 
+        {/* --- 階段 1: 等待大廳 (Entry) --- */}
         {roomData.phase === 'entry' && (
           <div className="animate-fade-in space-y-8">
             <Card className="text-center py-16 border-t-4 border-t-emerald-500">
               <h2 className="text-3xl font-bold mb-3">準備開始</h2>
-              <p className="text-slate-400 text-lg mb-10">Waiting for players...</p>
+              <p className="text-slate-400 text-lg mb-10">等待其他玩家加入...</p>
 
               <div className="flex flex-wrap gap-3 justify-center mb-10">
                 {participantList.map(([uid, name]) => (
@@ -613,8 +592,8 @@ const App = () => {
               </div>
 
               {isHost ? (
-                <Button onClick={() => nextPhase('rule-entry')} size="lg" className="w-full shadow-emerald-900/50 text-2xl py-6">
-                  開始設定規則 <ArrowRight />
+                <Button onClick={() => nextPhase('gift-entry')} size="lg" className="w-full shadow-emerald-900/50 text-2xl py-6" disabled={participantList.length < 2}>
+                  下一步：登錄禮物 <ArrowRight />
                 </Button>
               ) : (
                 <p className="text-slate-500 animate-pulse text-base">等待房主開始遊戲...</p>
@@ -623,6 +602,37 @@ const App = () => {
           </div>
         )}
 
+        {/* --- 階段 1.5: 禮物登錄 (Gift Entry) - NEW --- */}
+        {roomData.phase === 'gift-entry' && (
+          <div className="animate-fade-in space-y-8">
+            <Card>
+              <h2 className="text-2xl font-bold text-center mb-2 flex items-center justify-center gap-2">
+                <Gift className="text-pink-400" size={28} /> 你的禮物是？
+              </h2>
+              <p className="text-sm text-slate-400 text-center mb-8">請簡單描述你帶來的禮物（其他人暫時看不到）</p>
+
+              <div className="mb-6">
+                <textarea
+                  className="w-full p-5 bg-slate-800/50 border border-slate-600 rounded-2xl focus:border-pink-500 outline-none resize-none text-xl text-white placeholder-slate-600 min-h-[120px]"
+                  placeholder="例：一個很重的馬克杯..."
+                  value={myGiftDescription}
+                  onChange={e => setMyGiftDescription(e.target.value)}
+                  disabled={roomData.gifts && roomData.gifts[user.uid]}
+                />
+              </div>
+
+              <Button onClick={submitGift} className="w-full text-xl py-5" disabled={!myGiftDescription}>
+                {roomData.gifts && roomData.gifts[user.uid] ? "已登錄，等待其他人..." : "確認登錄"}
+              </Button>
+            </Card>
+
+            <div className="text-center text-slate-500 text-sm">
+              完成進度： {Object.keys(roomData.gifts || {}).length} / {participantList.length}
+            </div>
+          </div>
+        )}
+
+        {/* --- 階段 2: 撰寫規則 --- */}
         {roomData.phase === 'rule-entry' && (
           <div className="animate-fade-in space-y-8">
             <Card>
@@ -658,6 +668,7 @@ const App = () => {
           </div>
         )}
 
+        {/* --- 階段 3: 遊戲進行 --- */}
         {roomData.phase === 'game-playing' && (
           <div className="animate-fade-in py-10 flex flex-col items-center">
             <div className="text-slate-400 mb-8 text-center w-full">
@@ -685,75 +696,78 @@ const App = () => {
             {isHost && (
               <div className="mt-10 w-full">
                 <Button onClick={nextRule} size="lg" className="w-full text-2xl py-6">
-                  {roomData.currentRuleIndex < roomData.rules.length - 1 ? "下一條指令 ➔" : "遊戲結束，進入結算 🏁"}
+                  {roomData.currentRuleIndex < roomData.rules.length - 1 ? "下一條指令 ➔" : "遊戲結束，進入投票 🏁"}
                 </Button>
               </div>
             )}
           </div>
         )}
 
-        {roomData.phase === 'result-entry' && (
-          <div className="animate-fade-in space-y-8">
-            <Card className="border-t-4 border-t-blue-500 py-10">
-              <h2 className="text-2xl font-bold text-center mb-8">🎁 你最後拿到了誰的禮物？</h2>
-              <div className="space-y-6">
-                <select
-                  className="w-full p-5 bg-slate-800 border border-slate-600 rounded-2xl text-xl text-white focus:border-blue-500 outline-none appearance-none"
-                  value={myGiftGiver}
-                  onChange={e => setMyGiftGiver(e.target.value)}
-                >
-                  <option value="">請選擇...</option>
-                  {participantList.map(([uid, name]) => (
-                    <option key={uid} value={uid}>{name} 的禮物</option>
-                  ))}
-                </select>
-                <Button onClick={submitResult} className="w-full bg-blue-600 border-blue-400 hover:bg-blue-500 text-xl py-5">確認送出</Button>
-              </div>
-            </Card>
-
-            <div className="text-center">
-              <h3 className="text-sm text-slate-500 mb-3">已回報玩家</h3>
-              <div className="flex flex-wrap justify-center gap-2">
-                {Object.keys(roomData.resultMapping).map(uid => (
-                  <span key={uid} className="bg-blue-500/20 text-blue-300 text-xs px-3 py-1.5 rounded-full border border-blue-500/30">
-                    {roomData.participants[uid]}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
+        {/* --- 階段 5: 投票審判 (大幅重構：清單式評分) --- */}
         {roomData.phase === 'voting' && (
           <div className="animate-fade-in space-y-6 pb-20">
-            <div className="bg-yellow-500/10 border border-yellow-500/30 p-5 rounded-2xl flex gap-4 items-start mb-6">
-              <AlertTriangle className="text-yellow-500 shrink-0 mt-1" size={24} />
-              <div>
-                <h2 className="text-lg font-bold text-yellow-500">審判時刻</h2>
-                <p className="text-sm text-yellow-200/70 mt-1">請幫大家輸入禮物內容，並按下 + 按鈕給予雷指數評分！</p>
-              </div>
-            </div>
+            {/* 狀態提示 */}
+            {roomData.votingStatus && roomData.votingStatus[user.uid] ? (
+              <Card className="text-center py-12 border-t-4 border-t-green-500">
+                <CheckCircle size={64} className="text-green-400 mx-auto mb-4" />
+                <h2 className="text-2xl font-bold mb-2">評分已送出</h2>
+                <p className="text-slate-400">等待其他人完成...</p>
+                <div className="mt-6 text-sm text-slate-500">
+                  進度：{Object.keys(roomData.votingStatus || {}).length} / {participantList.length}
+                </div>
+              </Card>
+            ) : (
+              <>
+                <div className="bg-yellow-500/10 border border-yellow-500/30 p-5 rounded-2xl flex gap-4 items-start mb-6">
+                  <AlertTriangle className="text-yellow-500 shrink-0 mt-1" size={24} />
+                  <div>
+                    <h2 className="text-lg font-bold text-yellow-500">審判時刻</h2>
+                    <p className="text-sm text-yellow-200/70 mt-1">請依序對大家的禮物評分！<br />分數越高 = 越雷 (10分=爛透了)</p>
+                  </div>
+                </div>
 
-            {participantList.map(([receiverUid, receiverName]) => (
-              <VotingItem
-                key={receiverUid}
-                receiverUid={receiverUid}
-                receiverName={receiverName}
-                roomData={roomData}
-                vote={vote}
-                submitGiftDescription={submitGiftDescription}
-                currentUserId={user.uid}
-              />
-            ))}
+                {participantList.map(([targetUid, targetName]) => {
+                  if (targetUid === user.uid) return null; // 不用評自己
+                  const giftName = roomData.gifts ? roomData.gifts[targetUid] : "神秘禮物";
+                  const myScore = myVotes[targetUid] || 1;
 
-            {isHost && (
-              <div className="fixed bottom-6 left-0 w-full px-4 z-50 flex justify-center">
-                <Button variant="danger" className="w-full max-w-2xl shadow-2xl border-t border-red-400 text-2xl py-6" onClick={() => nextPhase('result')}>☠️ 結算懲罰 ☠️</Button>
-              </div>
+                  return (
+                    <Card key={targetUid} className="p-5 border border-white/5 relative overflow-hidden">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <div className="text-sm text-slate-400 mb-1">{targetName} 的禮物</div>
+                          <div className="text-xl font-bold text-white">{giftName}</div>
+                        </div>
+                        <div className="text-4xl font-black text-yellow-400">{myScore}</div>
+                      </div>
+
+                      <input
+                        type="range"
+                        min="1" max="10"
+                        value={myScore}
+                        onChange={(e) => handleVoteChange(targetUid, parseInt(e.target.value))}
+                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                      />
+                      <div className="flex justify-between text-xs text-slate-500 mt-2 px-1">
+                        <span>1 (天使)</span>
+                        <span>5 (普通)</span>
+                        <span>10 (雷爆)</span>
+                      </div>
+                    </Card>
+                  );
+                })}
+
+                <div className="fixed bottom-6 left-0 w-full px-4 z-50 flex justify-center">
+                  <Button variant="danger" className="w-full max-w-2xl shadow-2xl border-t border-red-400 text-2xl py-6" onClick={submitVotes}>
+                    ✅ 確認送出評分
+                  </Button>
+                </div>
+              </>
             )}
           </div>
         )}
 
+        {/* --- 階段 6: 最終結果 --- */}
         {roomData.phase === 'result' && (
           <div className="animate-fade-in space-y-8 pb-20">
             <div className="text-center mb-10">
@@ -764,21 +778,23 @@ const App = () => {
             </div>
 
             {participantList.map(([uid]) => {
-              const details = roomData.matchDetails[uid] || { ratings: {} };
-              const totalScore = Object.values(details.ratings || {}).reduce((a, b) => a + b, 0);
+              // 計算總分
+              const userRatings = roomData.ratings ? roomData.ratings[uid] : {};
+              const totalScore = Object.values(userRatings || {}).reduce((a, b) => a + b, 0);
+
               return {
                 uid,
-                ...details,
                 totalScore,
-                giverName: roomData.participants[roomData.resultMapping[uid]]
+                name: roomData.participants[uid],
+                giftName: roomData.gifts ? roomData.gifts[uid] : "神秘禮物"
               };
             }).sort((a, b) => b.totalScore - a.totalScore).slice(0, 3).map((item, idx) => (
               <div key={item.uid} className={`relative rounded-3xl p-6 shadow-xl flex items-center gap-5 border ${idx === 0 ? 'bg-gradient-to-r from-yellow-900/80 to-slate-900 border-yellow-500 transform scale-105 z-10' : 'bg-slate-800/80 border-slate-700'}`}>
                 {idx === 0 && <div className="absolute -top-4 -right-3 text-5xl animate-bounce">👑</div>}
                 <div className={`w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-2xl shrink-0 ${idx === 0 ? 'bg-yellow-500 shadow-lg shadow-yellow-500/50' : idx === 1 ? 'bg-slate-500' : 'bg-amber-700'}`}>#{idx + 1}</div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-bold text-white text-2xl truncate mb-1">{item.giverName}</div>
-                  <div className="text-base text-slate-400 truncate">{item.giftName || "神秘禮物"}</div>
+                  <div className="font-bold text-white text-2xl truncate mb-1">{item.name}</div>
+                  <div className="text-base text-slate-400 truncate">{item.giftName}</div>
                 </div>
                 <div className="text-right">
                   <div className="text-4xl font-black text-red-500">{item.totalScore}</div>
