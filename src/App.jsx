@@ -6,7 +6,6 @@ import { Gift, Users, ArrowRight, Zap, Skull, Play, Edit3, AlertTriangle, LogIn,
 
 // ==========================================
 // ⚠️ 請在此處填入你的 Firebase 設定
-// 你可以在 Firebase Console -> Project Settings -> General -> Your apps 找到
 // ==========================================
 const firebaseConfig = {
   apiKey: "AIzaSyDxqdu-Gbd9ZnMCccuUSyDkZ9_dxgIwHJ0",
@@ -17,16 +16,11 @@ const firebaseConfig = {
   appId: "1:1029943918620:web:590f68fcfb8b40dab09fd9",
   measurementId: "G-4YY14G3EX8"
 };
-
 // 初始化 Firebase
-// 簡單防呆：如果使用者還沒填 Config，避免報錯炸裂，只顯示黑屏提示
 const isConfigured = firebaseConfig.apiKey !== "請貼上你的_apiKey";
 const app = isConfigured ? initializeApp(firebaseConfig) : null;
 const auth = isConfigured ? getAuth(app) : null;
 const db = isConfigured ? getFirestore(app) : null;
-
-// 設定一個固定的 App ID (用於資料庫路徑分類，你可以隨意修改)
-const appId = 'xmas-party-2025';
 
 // --- 獨立的雪花背景元件 ---
 const SnowBackground = memo(() => {
@@ -143,18 +137,22 @@ const App = () => {
   useEffect(() => {
     if (!user || !roomId || !isInRoom) return;
 
-    // 路徑結構：artifacts/{appId}/public/data/rooms/room_{id}
-    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', `room_${roomId}`);
+    // 💡 修正重點：使用簡單的頂層集合 "xmas_rooms"
+    // 這樣可以避免路徑過深導致的權限或索引問題
+    const roomRef = doc(db, 'xmas_rooms', `room_${roomId}`);
+
     const unsubscribe = onSnapshot(roomRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setRoomData(data);
       } else {
+        // 如果監聽不到，可能代表房間剛被建立但還沒同步，或是真的不存在
+        // 但因為我們在 joinRoom 有先 setDoc，所以通常不會進來這裡
         setRoomData(null);
       }
     }, (error) => {
       console.error("Error listening to room:", error);
-      alert("讀取房間失敗，請確認 Firestore 權限規則是否已設為公開 (Test Mode)");
+      alert(`連線錯誤：${error.message}\n請確認 Firestore 規則是否為公開 (Test Mode)`);
     });
 
     return () => unsubscribe();
@@ -163,17 +161,16 @@ const App = () => {
   // --- 動作函式 ---
 
   const joinRoom = async () => {
-    // 1. 強制去除前後空白，避免複製貼上錯誤
-    const safeRoomId = roomId.trim();
+    const safeRoomId = roomId.toString().trim(); // 強制轉字串
     const safeUserName = userName.trim();
 
     if (!safeRoomId || !safeUserName) return alert("請輸入房間代碼和你的名字");
 
-    // 更新 state 為乾淨的數值，確保監聽器聽到的是正確的 ID
     setRoomId(safeRoomId);
     setUserName(safeUserName);
 
-    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', `room_${safeRoomId}`);
+    // 💡 修正重點：對應上方的簡單路徑
+    const roomRef = doc(db, 'xmas_rooms', `room_${safeRoomId}`);
 
     try {
       const docSnap = await getDoc(roomRef);
@@ -204,40 +201,40 @@ const App = () => {
       setIsInRoom(true);
     } catch (e) {
       console.error(e);
-      alert("加入失敗，請檢查 Firestore 權限設定");
+      alert("加入失敗！請確認 Firebase Firestore 的規則 (Rules) 已經設為 true (公開)");
     }
   };
 
   const copyInvite = () => {
-    // 2. 自動抓取當前網址
     const currentUrl = window.location.href;
-    const inviteText = `🎄 2025 交換禮物派對邀請！\n\n1. 請點擊連結加入：\n${currentUrl}\n\n2. 輸入房間代碼：${roomId}\n\n等你來開戰！`;
+    const inviteText = `🎄 2025 交換禮物派對邀請！\n\n1. 點擊連結：${currentUrl}\n2. 輸入代碼：${roomId}\n\n快來加入！`;
 
+    // 萬用複製法
     const textArea = document.createElement("textarea");
     textArea.value = inviteText;
     textArea.style.position = "fixed";
     textArea.style.left = "-9999px";
-    textArea.style.top = "0";
     document.body.appendChild(textArea);
     textArea.focus();
     textArea.select();
-
     try {
-      const successful = document.execCommand('copy');
-      if (successful) {
-        alert("✅ 邀請已複製！\n(包含連結與代碼)");
-      } else {
-        alert(`請手動複製分享：\n\n${inviteText}`);
-      }
+      document.execCommand('copy');
+      alert("✅ 邀請已複製！趕快貼給朋友！");
     } catch (err) {
-      alert(`請手動複製分享：\n\n${inviteText}`);
+      alert(`請手動複製：\n\n${inviteText}`);
     }
     document.body.removeChild(textArea);
   };
 
+  // 通用更新函式 (簡化路徑引用)
+  const updateRoom = async (updates) => {
+    if (!roomId) return;
+    const roomRef = doc(db, 'xmas_rooms', `room_${roomId}`);
+    await updateDoc(roomRef, updates);
+  };
+
   const nextPhase = async (nextPhaseName) => {
     if (!roomData) return;
-    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', `room_${roomId}`);
 
     let updates = { phase: nextPhaseName };
 
@@ -273,27 +270,23 @@ const App = () => {
       updates.matchDetails = details;
     }
 
-    await updateDoc(roomRef, updates);
+    await updateRoom(updates);
   };
 
   const submitRule = async () => {
     if (!myRuleInput.trim()) return;
-    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', `room_${roomId}`);
-
     const myIndex = roomData.rules.findIndex(r => r.uid === user.uid);
     if (myIndex === -1) return;
 
     const newRules = [...roomData.rules];
     newRules[myIndex].text = myRuleInput;
-
-    await updateDoc(roomRef, { rules: newRules });
-    alert("規則已送出！等待其他人...");
+    await updateRoom({ rules: newRules });
+    alert("規則已送出！");
   };
 
   const nextRule = async () => {
-    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', `room_${roomId}`);
     if (roomData.currentRuleIndex < roomData.rules.length - 1) {
-      await updateDoc(roomRef, { currentRuleIndex: increment(1) });
+      await updateRoom({ currentRuleIndex: increment(1) });
     } else {
       nextPhase('result-entry');
     }
@@ -301,30 +294,18 @@ const App = () => {
 
   const submitResult = async () => {
     if (!myGiftGiver) return;
-    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', `room_${roomId}`);
-    await updateDoc(roomRef, {
-      [`resultMapping.${user.uid}`]: myGiftGiver
-    });
+    await updateRoom({ [`resultMapping.${user.uid}`]: myGiftGiver });
     alert("已回報！");
   };
 
   const submitGiftDescription = async (targetUid, text) => {
-    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', `room_${roomId}`);
-    await updateDoc(roomRef, {
-      [`matchDetails.${targetUid}.giftName`]: text
-    });
+    await updateRoom({ [`matchDetails.${targetUid}.giftName`]: text });
   };
 
   const vote = async (targetUid, delta) => {
     const currentVotes = roomData.matchDetails[targetUid]?.votes || 1;
-    let newVotes = currentVotes + delta;
-    if (newVotes < 1) newVotes = 1;
-    if (newVotes > 10) newVotes = 10;
-
-    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', `room_${roomId}`);
-    await updateDoc(roomRef, {
-      [`matchDetails.${targetUid}.votes`]: newVotes
-    });
+    let newVotes = Math.max(1, Math.min(10, currentVotes + delta));
+    await updateRoom({ [`matchDetails.${targetUid}.votes`]: newVotes });
   };
 
   const drawPunishment = async () => {
@@ -334,8 +315,7 @@ const App = () => {
       "用臉衝破保鮮膜", "清唱一首聖誕歌（副歌）"
     ];
     const picked = punishments[Math.floor(Math.random() * punishments.length)];
-    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', `room_${roomId}`);
-    await updateDoc(roomRef, { punishment: picked });
+    await updateRoom({ punishment: picked });
   };
 
 
@@ -444,9 +424,6 @@ const App = () => {
             </Card>
           </div>
         )}
-
-        {/* ... (其餘階段 UI 程式碼保持不變) ... */}
-        {/* 為確保檔案完整，以下重複其他階段 */}
 
         {roomData.phase === 'rule-entry' && (
           <div className="animate-fade-in space-y-6">
