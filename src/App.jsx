@@ -422,7 +422,7 @@ const App = () => {
           currentRuleIndex: 0,
           votingStatus: {},
           ratings: {},
-          finalResults: null, // 儲存快照結果
+          finalResults: null,
           finalPunishment: null,
           isSpinning: false,
           createdAt: new Date().toISOString()
@@ -517,8 +517,9 @@ const App = () => {
     // 進入結果畫面時，建立成績快照 (Snapshot)
     if (nextPhaseName === 'result') {
       const results = Object.keys(currentData.participants).map(uid => {
-        const details = currentData.matchDetails[uid] || { ratings: {} };
-        const totalScore = Object.values(details.ratings || {}).reduce((a, b) => a + b, 0);
+        // FIX: 改為讀取 ratings，而不是 matchDetails (那是舊版的)
+        const userRatings = currentData.ratings ? currentData.ratings[uid] : {};
+        const totalScore = Object.values(userRatings || {}).reduce((a, b) => a + b, 0);
         return {
           uid,
           name: currentData.participants[uid],
@@ -964,6 +965,13 @@ const App = () => {
                 </Button>
               </div>
             )}
+
+            {/* 確保所有人都看得到離開按鈕 */}
+            <div className="mt-8 text-center">
+              <Button variant="secondary" onClick={leaveRoom} className="w-full max-w-md mx-auto bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white">
+                <LogOut size={20} /> 離開房間
+              </Button>
+            </div>
           </div>
         )}
 
@@ -1007,21 +1015,21 @@ const App = () => {
                 </div>
               )}
 
-              {isHost && (
-                <div className="mt-8 w-full max-w-xs space-y-4">
+              <div className="mt-8 w-full max-w-xs space-y-4">
+                {/* 只有房主能按開始 */}
+                {isHost ? (
                   <Button variant="neutral" size="lg" onClick={spinPunishment} className="w-full text-xl py-5" disabled={roomData.isSpinning}>
                     {roomData.isSpinning ? "抽選中..." : "🎲 啟動輪盤"}
                   </Button>
+                ) : (
+                  !roomData.finalPunishment && <div className="text-center text-slate-500 py-4">等待房主啟動輪盤...</div>
+                )}
 
-                  <Button variant="secondary" onClick={leaveRoom} className="w-full bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white mt-8">
-                    <LogOut size={20} /> 結束遊戲
-                  </Button>
-                </div>
-              )}
-
-              {!isHost && !roomData.finalPunishment && (
-                <div className="mt-12 text-slate-500">等待房主啟動輪盤...</div>
-              )}
+                {/* 所有人都能按離開 */}
+                <Button variant="secondary" onClick={leaveRoom} className="w-full bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white mt-8">
+                  <LogOut size={20} /> 結束遊戲
+                </Button>
+              </div>
             </div>
           </div>
         )}
