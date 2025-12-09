@@ -813,7 +813,7 @@ const App = () => {
 
             <div className="text-center mt-12">
               <Button variant="secondary" onClick={leaveRoom} className="bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white px-10">
-                <LogOut size={20} /> 離開並清除房間 (最後一人)
+                <LogOut size={20} /> 離開房間
               </Button>
             </div>
           </div>
