@@ -163,9 +163,17 @@ const App = () => {
   // --- 動作函式 ---
 
   const joinRoom = async () => {
-    if (!roomId.trim() || !userName.trim()) return alert("請輸入房間代碼和你的名字");
+    // 1. 強制去除前後空白，避免複製貼上錯誤
+    const safeRoomId = roomId.trim();
+    const safeUserName = userName.trim();
 
-    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', `room_${roomId}`);
+    if (!safeRoomId || !safeUserName) return alert("請輸入房間代碼和你的名字");
+
+    // 更新 state 為乾淨的數值，確保監聽器聽到的是正確的 ID
+    setRoomId(safeRoomId);
+    setUserName(safeUserName);
+
+    const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', `room_${safeRoomId}`);
 
     try {
       const docSnap = await getDoc(roomRef);
@@ -175,7 +183,7 @@ const App = () => {
         await setDoc(roomRef, {
           hostId: user.uid,
           phase: 'entry',
-          participants: { [user.uid]: userName },
+          participants: { [user.uid]: safeUserName },
           rules: [],
           currentRuleIndex: 0,
           resultMapping: {},
@@ -190,7 +198,7 @@ const App = () => {
           return alert("遊戲已經開始，無法中途加入！");
         }
         await updateDoc(roomRef, {
-          [`participants.${user.uid}`]: userName
+          [`participants.${user.uid}`]: safeUserName
         });
       }
       setIsInRoom(true);
@@ -201,7 +209,10 @@ const App = () => {
   };
 
   const copyInvite = () => {
-    const inviteText = `🎄 2025 交換禮物派對邀請！\n\n1. 請點開我傳送的網頁連結\n2. 輸入房間代碼：${roomId}\n\n等你來開戰！`;
+    // 2. 自動抓取當前網址
+    const currentUrl = window.location.href;
+    const inviteText = `🎄 2025 交換禮物派對邀請！\n\n1. 請點擊連結加入：\n${currentUrl}\n\n2. 輸入房間代碼：${roomId}\n\n等你來開戰！`;
+
     const textArea = document.createElement("textarea");
     textArea.value = inviteText;
     textArea.style.position = "fixed";
@@ -214,7 +225,7 @@ const App = () => {
     try {
       const successful = document.execCommand('copy');
       if (successful) {
-        alert("✅ 邀請文字已複製！\n\n⚠️ 重要：請記得把「現在這個網頁的網址」一起貼給朋友喔！");
+        alert("✅ 邀請已複製！\n(包含連結與代碼)");
       } else {
         alert(`請手動複製分享：\n\n${inviteText}`);
       }
@@ -367,7 +378,7 @@ const App = () => {
               <LogIn size={20} /> 進入房間
             </Button>
             <div className="text-xs text-gray-400 mt-4 bg-black/20 p-2 rounded">
-              <p>💡 小提醒：請記得將部署後的網址傳給朋友喔！</p>
+              <p>💡 提醒：所有人必須在<b>同一個網址</b>輸入<b>同一個號碼</b>才能連線喔！</p>
             </div>
           </div>
         </Card>
@@ -397,7 +408,7 @@ const App = () => {
       </div>
 
       <main className="relative z-10 max-w-3xl mx-auto p-4 flex flex-col gap-6">
-        {/* 省略重複的 UI Code，直接複製上方完整版即可 */}
+
         {/* --- 階段 1: 等待大廳 (Entry) --- */}
         {roomData.phase === 'entry' && (
           <div className="animate-fade-in space-y-6">
@@ -414,16 +425,13 @@ const App = () => {
               <div className="bg-yellow-50 p-4 rounded-lg text-left text-sm text-gray-600 max-w-sm mx-auto mb-6">
                 <p>1. 請確認所有人都已顯示在上方。</p>
                 <p>2. 只有房主可以按開始。</p>
-                <p>3. 請將網址分享給朋友。</p>
+                <p>3. 請務必確認大家都在同一間房！</p>
               </div>
 
               <div className="mb-4">
                 <Button onClick={copyInvite} variant="secondary" className="w-full">
-                  <Share2 size={20} /> 複製邀請代碼
+                  <Share2 size={20} /> 複製邀請 (含連結)
                 </Button>
-                <p className="text-xs text-white/70 text-center mt-2 flex items-center justify-center gap-1">
-                  <LinkIcon size={12} /> 別忘了也要複製網址給朋友喔！
-                </p>
               </div>
 
               {isHost ? (
@@ -437,9 +445,8 @@ const App = () => {
           </div>
         )}
 
-        {/* ... (其他 UI 部分與先前版本相同，請直接使用) ... */}
-        {/* 為節省篇幅，此處省略中間的 rule-entry, game-playing, result-entry, voting, result 區塊 */}
-        {/* 請確保在實際檔案中包含所有階段的渲染邏輯 */}
+        {/* ... (其餘階段 UI 程式碼保持不變) ... */}
+        {/* 為確保檔案完整，以下重複其他階段 */}
 
         {roomData.phase === 'rule-entry' && (
           <div className="animate-fade-in space-y-6">
