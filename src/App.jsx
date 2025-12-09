@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, memo } from 'react';
+import React, { useState, useEffect, useRef, memo, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, getDoc, deleteDoc, deleteField, increment } from 'firebase/firestore';
@@ -62,35 +62,6 @@ const getRatingLabel = (score) => {
   return { text: "☠️ 恭喜! 超~級~雷~", color: "text-red-500 font-black animate-pulse" };
 };
 
-// --- 解析規則並產生提示 ---
-const calculateHint = (ruleText, myNum, allParticipants) => {
-  if (!ruleText || !myNum || !allParticipants) return null;
-  const numbers = Object.values(allParticipants).sort((a, b) => a - b);
-  const myIndex = numbers.indexOf(myNum);
-  const count = numbers.length;
-  if (myIndex === -1) return null;
-
-  let targetNum = null;
-  const plusMatch = ruleText.match(/號碼\s*\+(\d+)/);
-  if (plusMatch) {
-    const offset = parseInt(plusMatch[1]);
-    const targetIndex = (myIndex + offset) % count;
-    targetNum = numbers[targetIndex];
-  }
-  const minusMatch = ruleText.match(/號碼\s*\-(\d+)/);
-  if (minusMatch) {
-    const offset = parseInt(minusMatch[1]);
-    const targetIndex = (myIndex - offset + count * 10) % count;
-    targetNum = numbers[targetIndex];
-  }
-
-  if (targetNum !== null) {
-    const targetEntry = Object.entries(allParticipants).find(([uid, num]) => num === targetNum);
-    if (targetEntry) return { num: targetNum, uid: targetEntry[0] };
-  }
-  return null;
-};
-
 // --- Toast 通知元件 ---
 const Toast = ({ message, onClose }) => {
   useEffect(() => {
@@ -108,30 +79,34 @@ const Toast = ({ message, onClose }) => {
   );
 };
 
-// --- 輪盤元件 (Roulette) ---
+// --- 輪盤元件 (Roulette) - 修正同步版 ---
 const RouletteWheel = ({ items, targetItem, isSpinning, className }) => {
   const [rotation, setRotation] = useState(0);
 
   useEffect(() => {
-    if (isSpinning && targetItem && items.length > 0) {
+    // 只有當真的有結果，且目前還沒轉到定位時才計算
+    if (targetItem && items.length > 0) {
       const targetIndex = items.indexOf(targetItem);
       if (targetIndex === -1) return;
 
       const segmentAngle = 360 / items.length;
-      // 確保指針(Top)對準區塊中心
-      const centerAngle = (targetIndex * segmentAngle) + (segmentAngle / 2);
-      const baseRotation = 3600 + (360 - centerAngle); // 多轉10圈
-      const randomOffset = (Math.random() - 0.5) * (segmentAngle * 0.8);
 
-      setRotation(baseRotation + randomOffset);
+      // 計算目標中心點的角度 (以0度為起點)
+      const centerAngle = (targetIndex * segmentAngle) + (segmentAngle / 2);
+
+      // 基礎旋轉：多轉10圈 + 對齊角度
+      // 移除隨機偏移，確保精準對齊
+      const baseRotation = 3600 + (360 - centerAngle);
+
+      setRotation(baseRotation);
     }
-  }, [isSpinning, targetItem, items]);
+  }, [targetItem, items]); // 移除 isSpinning 依賴，只要有 targetItem 就轉
 
   const colors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7', '#ec4899', '#6366f1'];
 
   return (
-    // 修正：加大尺寸 (手機 w-80, 電腦 w-[500px])
     <div className={`relative w-80 h-80 md:w-[500px] md:h-[500px] mx-auto ${className}`}>
+      {/* 指針 */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-4 z-20 filter drop-shadow-lg">
         <ChevronDown size={60} className="text-white fill-white stroke-[4px] stroke-slate-900" />
       </div>
@@ -273,9 +248,6 @@ const App = () => {
   const [myGiftDescription, setMyGiftDescription] = useState('');
   const [myVotes, setMyVotes] = useState({}); // { targetUid: score }
 
-  // 抽獎狀態
-  const [punishmentPool, setPunishmentPool] = useState([]);
-
   // 抽獎文字跳動狀態 (Client side animation)
   const [randomText, setRandomText] = useState("🎲 準備抽出...");
   const [showFinalResult, setShowFinalResult] = useState(false);
@@ -283,12 +255,16 @@ const App = () => {
   // 我的號碼
   const myNumber = roomData?.participantNumbers?.[user?.uid];
 
-  // 自動提示
-  const [currentHint, setCurrentHint] = useState(null);
-
   const showToast = (msg) => {
     setToast(msg);
   };
+
+  // 確保懲罰池排序一致 (Memoized & Sorted)
+  const punishmentPool = useMemo(() => {
+    const punishments = roomData?.punishments ? Object.values(roomData.punishments) : [];
+    if (punishments.length === 0) return RANDOM_PUNISHMENTS.sort(); // 預設也要排序
+    return punishments.sort(); // 關鍵：強制排序，確保所有人看到的順序一致
+  }, [roomData?.punishments]);
 
   if (!isConfigured) {
     return (
@@ -341,7 +317,6 @@ const App = () => {
           setIsInRoom(true);
           setUserName(data.participants[user.uid]);
 
-          // 還原輸入狀態
           if (data.phase === 'gift-entry') {
             const myGift = data.gifts ? data.gifts[user.uid] : '';
             if (myGift) setMyGiftDescription(myGift);
@@ -356,39 +331,16 @@ const App = () => {
           }
         }
 
-        // 計算提示 (遊戲階段)
-        if (data.phase === 'game-playing' && data.participantNumbers && data.participantNumbers[user.uid]) {
-          const rule = data.rules[data.currentRuleIndex];
-          if (rule && rule.text) {
-            const hint = calculateHint(rule.text, data.participantNumbers[user.uid], data.participantNumbers);
-            if (hint) {
-              const targetName = data.participants[hint.uid];
-              setCurrentHint(`你的目標是：${hint.num} 號 (${targetName})`);
-            } else {
-              setCurrentHint(null);
-            }
-          }
-        } else {
-          setCurrentHint(null);
-        }
-
-        // 初始化懲罰池
-        if (data.phase === 'punishment-reveal' && (!punishmentPool || punishmentPool.length === 0)) {
-          let pool = Object.values(data.punishments || {});
-          if (pool.length === 0) pool = RANDOM_PUNISHMENTS;
-          setPunishmentPool(pool);
-        }
-
-        // 處理抽獎動畫 (Client Side)
-        if (data.isSpinning) {
+        // 處理抽獎動畫 (只在第一次開獎時執行)
+        if (data.isSpinning && !showFinalResult) {
           setShowFinalResult(false);
           const interval = setInterval(() => {
-            let pool = Object.values(data.punishments || {});
-            if (pool.length === 0) pool = RANDOM_PUNISHMENTS;
-            setRandomText(pool[Math.floor(Math.random() * pool.length)]);
+            // 使用上面 memo 的 pool (雖然這裡無法直接存取 memo，但邏輯一致即可)
+            // 這裡僅作視覺效果，不影響結果
+            const p = data.punishments ? Object.values(data.punishments) : RANDOM_PUNISHMENTS;
+            setRandomText(p[Math.floor(Math.random() * p.length)]);
           }, 100);
 
-          // 5秒後停止動畫並顯示結果
           const timeout = setTimeout(() => {
             clearInterval(interval);
             setShowFinalResult(true);
@@ -398,45 +350,35 @@ const App = () => {
             clearInterval(interval);
             clearTimeout(timeout);
           }
-        } else if (!data.isSpinning && !data.finalPunishment) {
-          setRandomText("🎲 準備抽出...");
-          setShowFinalResult(false);
+        }
+
+        // 如果已經有結果且 spinning 為 true (後進來的人)，直接顯示結果
+        if (data.finalPunishment && data.isSpinning && !showFinalResult) {
+          setShowFinalResult(true);
         }
 
         // --- 自動流程 (由主持人觸發) ---
         if (data.hostId === user.uid) {
           const participantCount = Object.keys(data.participants).length;
 
-          // 1. 禮物登錄完 -> 寫規則 (順便分發隨機號碼)
           if (data.phase === 'gift-entry' && participantCount > 1) {
             const finishedGifts = Object.keys(data.gifts || {}).length;
-            if (finishedGifts === participantCount) {
-              nextPhase('rule-entry', data);
-            }
+            if (finishedGifts === participantCount) nextPhase('rule-entry', data);
           }
 
-          // 2. 寫完規則 -> 寫懲罰
           if (data.phase === 'rule-entry' && participantCount > 1) {
             const finishedRules = data.rules.filter(r => r.text && r.text.trim() !== "").length;
-            if (finishedRules === participantCount) {
-              nextPhase('punishment-entry', data);
-            }
+            if (finishedRules === participantCount) nextPhase('punishment-entry', data);
           }
 
-          // 3. 寫完懲罰 -> 遊戲開始
           if (data.phase === 'punishment-entry' && participantCount > 1) {
             const finishedPunishments = Object.keys(data.punishments || {}).length;
-            if (finishedPunishments === participantCount) {
-              nextPhase('game-playing', data);
-            }
+            if (finishedPunishments === participantCount) nextPhase('game-playing', data);
           }
 
-          // 4. 投票完 -> 倒數
           if (data.phase === 'voting' && participantCount > 1) {
             const votedCount = Object.keys(data.votingStatus || {}).length;
-            if (votedCount === participantCount) {
-              nextPhase('countdown', data);
-            }
+            if (votedCount === participantCount) nextPhase('countdown', data);
           }
         }
 
@@ -445,7 +387,7 @@ const App = () => {
       }
     });
     return () => unsubscribe();
-  }, [user, roomId]);
+  }, [user, roomId]); // 注意：這裡拿掉了 showFinalResult 依賴以避免迴圈
 
   // --- 動作函式 ---
 
@@ -495,7 +437,7 @@ const App = () => {
           hostId: user.uid,
           phase: 'entry',
           participants: { [user.uid]: safeUserName },
-          participantNumbers: { [user.uid]: 1 },
+          participantNumbers: {},
           gifts: {},
           rules: [],
           punishments: {},
@@ -513,21 +455,7 @@ const App = () => {
           showToast("遊戲已經開始，無法中途加入！");
           return;
         }
-
-        // 隨機編號邏輯
-        const currentNumbers = currentData.participantNumbers || {};
-        let myNewNumber = currentNumbers[user.uid];
-        if (!myNewNumber) {
-          const takenNumbers = Object.values(currentNumbers);
-          do {
-            myNewNumber = Math.floor(Math.random() * 99) + 1;
-          } while (takenNumbers.includes(myNewNumber));
-        }
-
-        await updateDoc(roomRef, {
-          [`participants.${user.uid}`]: safeUserName,
-          [`participantNumbers.${user.uid}`]: myNewNumber
-        });
+        await updateDoc(roomRef, { [`participants.${user.uid}`]: safeUserName });
       }
       localStorage.setItem('xmas_last_room_id', safeRoomId);
       setIsInRoom(true);
@@ -574,12 +502,11 @@ const App = () => {
     if (!currentData) return;
     let updates = { phase: nextPhaseName };
 
-    // 進入規則階段初始化
-    if (nextPhaseName === 'rule-entry' && currentData.phase === 'gift-entry') {
+    // --- 關鍵邏輯：進入禮物登錄階段 (遊戲正式開始) 時，分配隨機號碼 ---
+    if (nextPhaseName === 'gift-entry' && currentData.phase === 'entry') {
       const pIds = Object.keys(currentData.participants);
       const count = pIds.length;
 
-      // 產生連續號碼並洗牌
       const numbers = Array.from({ length: count }, (_, i) => i + 1);
       for (let i = numbers.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -591,7 +518,10 @@ const App = () => {
         assignedNumbers[uid] = numbers[index];
       });
       updates.participantNumbers = assignedNumbers;
+    }
 
+    if (nextPhaseName === 'rule-entry') {
+      const pIds = Object.keys(currentData.participants);
       const initialRules = pIds.map(uid => ({
         uid,
         authorName: currentData.participants[uid],
@@ -600,7 +530,6 @@ const App = () => {
       updates.rules = initialRules;
     }
 
-    // 進入遊戲階段初始化
     if (nextPhaseName === 'game-playing') {
       const shuffled = [...currentData.rules];
       for (let i = shuffled.length - 1; i > 0; i--) {
@@ -623,7 +552,6 @@ const App = () => {
       updates.matchDetails = details;
     }
 
-    // 進入結果畫面時，建立成績快照
     if (nextPhaseName === 'result') {
       const results = Object.keys(currentData.participants).map(uid => {
         const userRatings = currentData.ratings ? currentData.ratings[uid] : {};
@@ -679,13 +607,11 @@ const App = () => {
   };
 
   const submitVotes = async () => {
-    // 修正：不需要檢查所有 myVotes，沒動到的預設為 1
     const updates = { [`votingStatus.${user.uid}`]: true };
 
-    // 遍歷所有參加者，為每個人打分
     Object.keys(roomData.participants).forEach(targetUid => {
-      if (targetUid === user.uid) return; // 不評自己
-      const score = myVotes[targetUid] || 1; // 若沒動滑桿，預設 1 分
+      if (targetUid === user.uid) return;
+      const score = myVotes[targetUid] || 1; // 預設 1
       updates[`ratings.${targetUid}.${user.uid}`] = score;
     });
 
@@ -693,10 +619,13 @@ const App = () => {
     showToast("評分已送出！等待開票...");
   };
 
-  // 抽獎邏輯
+  // 抽獎邏輯 (主持人執行)
   const spinPunishment = async () => {
+    // 1. 使用跟前端一致的排序邏輯取得清單
     let pool = Object.values(roomData.punishments || {});
     if (pool.length === 0) pool = RANDOM_PUNISHMENTS;
+    pool.sort(); // ⚠️ 關鍵：後端計算也要排序，確保 index 一致
+
     const final = pool[Math.floor(Math.random() * pool.length)];
 
     await updateRoom({
@@ -959,16 +888,6 @@ const App = () => {
                 <div className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500" style={{ width: `${((roomData.currentRuleIndex + 1) / roomData.rules.length) * 100}%` }}></div>
               </div>
             </div>
-
-            {/* 自動提示 (Smart Hint) */}
-            {currentHint && (
-              <div className="mb-6 animate-fade-in-up w-full">
-                <div className="bg-blue-500/20 border border-blue-500/50 text-blue-200 px-6 py-4 rounded-xl text-center shadow-lg backdrop-blur-sm flex items-center justify-center gap-2">
-                  <Lightbulb className="text-yellow-400 shrink-0 animate-pulse" size={24} />
-                  <span className="font-bold text-lg">{currentHint}</span>
-                </div>
-              </div>
-            )}
 
             <Card className="w-full text-center py-20 transform transition-all duration-500 hover:scale-[1.02] border-t-4 border-t-purple-500 relative overflow-hidden group">
               <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-purple-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
