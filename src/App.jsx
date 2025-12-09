@@ -23,7 +23,7 @@ const app = isConfigured ? initializeApp(firebaseConfig) : null;
 const auth = isConfigured ? getAuth(app) : null;
 const db = isConfigured ? getFirestore(app) : null;
 
-// --- 隨機規則庫 (邏輯型) ---
+// --- 隨機規則庫 ---
 const RANDOM_RULES = [
   "所有人將禮物傳給「號碼 +1」的人 (循環)",
   "所有人將禮物傳給「號碼 -1」的人 (循環)",
@@ -62,41 +62,32 @@ const getRatingLabel = (score) => {
   return { text: "☠️ 恭喜! 超~級~雷~", color: "text-red-500 font-black animate-pulse" };
 };
 
-// --- 解析規則並產生提示的 Helper ---
+// --- 解析規則並產生提示 ---
 const calculateHint = (ruleText, myNum, allParticipants) => {
   if (!ruleText || !myNum || !allParticipants) return null;
-
-  // 取得所有存在的號碼並排序 (1, 2, 3...)
   const numbers = Object.values(allParticipants).sort((a, b) => a - b);
   const myIndex = numbers.indexOf(myNum);
   const count = numbers.length;
   if (myIndex === -1) return null;
 
   let targetNum = null;
-
-  // 解析 +N 邏輯
   const plusMatch = ruleText.match(/號碼\s*\+(\d+)/);
   if (plusMatch) {
     const offset = parseInt(plusMatch[1]);
     const targetIndex = (myIndex + offset) % count;
     targetNum = numbers[targetIndex];
   }
-
-  // 解析 -N 邏輯
   const minusMatch = ruleText.match(/號碼\s*\-(\d+)/);
   if (minusMatch) {
     const offset = parseInt(minusMatch[1]);
-    const targetIndex = (myIndex - offset + count * 10) % count; // 加多一點 count 避免負數
+    const targetIndex = (myIndex - offset + count * 10) % count;
     targetNum = numbers[targetIndex];
   }
 
   if (targetNum !== null) {
     const targetEntry = Object.entries(allParticipants).find(([uid, num]) => num === targetNum);
-    if (targetEntry) {
-      return { num: targetNum, uid: targetEntry[0] };
-    }
+    if (targetEntry) return { num: targetNum, uid: targetEntry[0] };
   }
-
   return null;
 };
 
@@ -127,8 +118,9 @@ const RouletteWheel = ({ items, targetItem, isSpinning, className }) => {
       if (targetIndex === -1) return;
 
       const segmentAngle = 360 / items.length;
+      // 確保指針(Top)對準區塊中心
       const centerAngle = (targetIndex * segmentAngle) + (segmentAngle / 2);
-      const baseRotation = 3600 + (360 - centerAngle);
+      const baseRotation = 3600 + (360 - centerAngle); // 多轉10圈
       const randomOffset = (Math.random() - 0.5) * (segmentAngle * 0.8);
 
       setRotation(baseRotation + randomOffset);
@@ -138,13 +130,14 @@ const RouletteWheel = ({ items, targetItem, isSpinning, className }) => {
   const colors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7', '#ec4899', '#6366f1'];
 
   return (
-    <div className={`relative w-64 h-64 md:w-80 md:h-80 mx-auto ${className}`}>
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-3 z-20 filter drop-shadow-lg">
-        <ChevronDown size={40} className="text-white fill-white stroke-[3px] stroke-slate-900" />
+    // 修正：加大尺寸 (手機 w-80, 電腦 w-[500px])
+    <div className={`relative w-80 h-80 md:w-[500px] md:h-[500px] mx-auto ${className}`}>
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-4 z-20 filter drop-shadow-lg">
+        <ChevronDown size={60} className="text-white fill-white stroke-[4px] stroke-slate-900" />
       </div>
 
       <div
-        className="w-full h-full rounded-full border-4 border-slate-800 shadow-2xl relative overflow-hidden transition-transform duration-[5000ms] cubic-bezier(0.15, 0.85, 0.15, 1)"
+        className="w-full h-full rounded-full border-8 border-slate-800 shadow-2xl relative overflow-hidden transition-transform duration-[5000ms] cubic-bezier(0.15, 0.85, 0.15, 1)"
         style={{
           transform: `rotate(${rotation}deg)`,
           background: `conic-gradient(${items.map((_, i) => `${colors[i % colors.length]} ${i * (100 / items.length)}% ${(i + 1) * (100 / items.length)}%`).join(', ')
@@ -159,15 +152,15 @@ const RouletteWheel = ({ items, targetItem, isSpinning, className }) => {
               className="absolute top-1/2 left-1/2 w-1/2 h-1 origin-left flex items-center"
               style={{ transform: `rotate(${angle - 90}deg)` }}
             >
-              <div className="pl-8 text-white font-bold text-xs md:text-sm truncate w-24 md:w-32 text-shadow" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>
+              <div className="pl-12 text-white font-bold text-sm md:text-xl truncate w-32 md:w-56 text-shadow" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>
                 {item}
               </div>
             </div>
           )
         })}
       </div>
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-slate-800 rounded-full border-2 border-slate-600 flex items-center justify-center shadow-xl z-10">
-        <Skull className="text-slate-400" size={20} />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 bg-slate-800 rounded-full border-4 border-slate-600 flex items-center justify-center shadow-xl z-10">
+        <Skull className="text-slate-400" size={32} />
       </div>
     </div>
   );
@@ -283,6 +276,10 @@ const App = () => {
   // 抽獎狀態
   const [punishmentPool, setPunishmentPool] = useState([]);
 
+  // 抽獎文字跳動狀態 (Client side animation)
+  const [randomText, setRandomText] = useState("🎲 準備抽出...");
+  const [showFinalResult, setShowFinalResult] = useState(false);
+
   // 我的號碼
   const myNumber = roomData?.participantNumbers?.[user?.uid];
 
@@ -382,6 +379,30 @@ const App = () => {
           setPunishmentPool(pool);
         }
 
+        // 處理抽獎動畫 (Client Side)
+        if (data.isSpinning) {
+          setShowFinalResult(false);
+          const interval = setInterval(() => {
+            let pool = Object.values(data.punishments || {});
+            if (pool.length === 0) pool = RANDOM_PUNISHMENTS;
+            setRandomText(pool[Math.floor(Math.random() * pool.length)]);
+          }, 100);
+
+          // 5秒後停止動畫並顯示結果
+          const timeout = setTimeout(() => {
+            clearInterval(interval);
+            setShowFinalResult(true);
+          }, 5000);
+
+          return () => {
+            clearInterval(interval);
+            clearTimeout(timeout);
+          }
+        } else if (!data.isSpinning && !data.finalPunishment) {
+          setRandomText("🎲 準備抽出...");
+          setShowFinalResult(false);
+        }
+
         // --- 自動流程 (由主持人觸發) ---
         if (data.hostId === user.uid) {
           const participantCount = Object.keys(data.participants).length;
@@ -474,6 +495,7 @@ const App = () => {
           hostId: user.uid,
           phase: 'entry',
           participants: { [user.uid]: safeUserName },
+          participantNumbers: { [user.uid]: 1 },
           gifts: {},
           rules: [],
           punishments: {},
@@ -491,7 +513,21 @@ const App = () => {
           showToast("遊戲已經開始，無法中途加入！");
           return;
         }
-        await updateDoc(roomRef, { [`participants.${user.uid}`]: safeUserName });
+
+        // 隨機編號邏輯
+        const currentNumbers = currentData.participantNumbers || {};
+        let myNewNumber = currentNumbers[user.uid];
+        if (!myNewNumber) {
+          const takenNumbers = Object.values(currentNumbers);
+          do {
+            myNewNumber = Math.floor(Math.random() * 99) + 1;
+          } while (takenNumbers.includes(myNewNumber));
+        }
+
+        await updateDoc(roomRef, {
+          [`participants.${user.uid}`]: safeUserName,
+          [`participantNumbers.${user.uid}`]: myNewNumber
+        });
       }
       localStorage.setItem('xmas_last_room_id', safeRoomId);
       setIsInRoom(true);
@@ -538,28 +574,24 @@ const App = () => {
     if (!currentData) return;
     let updates = { phase: nextPhaseName };
 
-    // --- 關鍵修正：在進入 'rule-entry' (也就是遊戲正式開始前) 分配隨機號碼 ---
+    // 進入規則階段初始化
     if (nextPhaseName === 'rule-entry' && currentData.phase === 'gift-entry') {
       const pIds = Object.keys(currentData.participants);
       const count = pIds.length;
 
-      // 1. 產生 1~N 的數列
+      // 產生連續號碼並洗牌
       const numbers = Array.from({ length: count }, (_, i) => i + 1);
-
-      // 2. Fisher-Yates 洗牌
       for (let i = numbers.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [numbers[i], numbers[j]] = [numbers[j], numbers[i]];
       }
 
-      // 3. 分配給每個 UID
       const assignedNumbers = {};
       pIds.forEach((uid, index) => {
         assignedNumbers[uid] = numbers[index];
       });
       updates.participantNumbers = assignedNumbers;
 
-      // 初始化規則陣列
       const initialRules = pIds.map(uid => ({
         uid,
         authorName: currentData.participants[uid],
@@ -568,7 +600,7 @@ const App = () => {
       updates.rules = initialRules;
     }
 
-    // 進入遊戲階段初始化 (洗牌規則)
+    // 進入遊戲階段初始化
     if (nextPhaseName === 'game-playing') {
       const shuffled = [...currentData.rules];
       for (let i = shuffled.length - 1; i > 0; i--) {
@@ -591,7 +623,7 @@ const App = () => {
       updates.matchDetails = details;
     }
 
-    // 進入結果畫面時，建立成績快照 (Snapshot)
+    // 進入結果畫面時，建立成績快照
     if (nextPhaseName === 'result') {
       const results = Object.keys(currentData.participants).map(uid => {
         const userRatings = currentData.ratings ? currentData.ratings[uid] : {};
@@ -635,7 +667,6 @@ const App = () => {
     if (roomData.currentRuleIndex < roomData.rules.length - 1) {
       await updateRoom({ currentRuleIndex: increment(1) });
     } else {
-      // 遊戲結束，直接進入投票
       nextPhase('voting');
     }
   };
@@ -648,30 +679,29 @@ const App = () => {
   };
 
   const submitVotes = async () => {
-    const participantCount = Object.keys(roomData.participants).length;
-    if (Object.keys(myVotes).length < participantCount - 1) {
-      showToast("請對所有人的禮物進行評分！");
-      return;
-    }
+    // 修正：不需要檢查所有 myVotes，沒動到的預設為 1
     const updates = { [`votingStatus.${user.uid}`]: true };
-    Object.entries(myVotes).forEach(([targetUid, score]) => {
+
+    // 遍歷所有參加者，為每個人打分
+    Object.keys(roomData.participants).forEach(targetUid => {
+      if (targetUid === user.uid) return; // 不評自己
+      const score = myVotes[targetUid] || 1; // 若沒動滑桿，預設 1 分
       updates[`ratings.${targetUid}.${user.uid}`] = score;
     });
+
     await updateRoom(updates);
     showToast("評分已送出！等待開票...");
   };
 
-  // 抽獎邏輯 (主持人執行)
+  // 抽獎邏輯
   const spinPunishment = async () => {
-    // 1. 決定結果
     let pool = Object.values(roomData.punishments || {});
     if (pool.length === 0) pool = RANDOM_PUNISHMENTS;
     const final = pool[Math.floor(Math.random() * pool.length)];
 
-    // 2. 寫入 DB，觸發所有人的動畫
     await updateRoom({
       finalPunishment: final,
-      isSpinning: true // 告訴前端開始轉
+      isSpinning: true
     });
   };
 
@@ -1107,14 +1137,13 @@ const App = () => {
 
             {/* 3. 結果與控制 (Bottom Fixed) */}
             <div className="shrink-0 p-4 w-full bg-slate-900/80 border-t border-white/10 backdrop-blur-md relative z-30 pb-8">
-              {/* 結果顯示 */}
-              {roomData.finalPunishment && (
-                <div className="mb-4 animate-fade-in-up">
-                  <div className="text-yellow-400 font-black text-2xl md:text-3xl text-center bg-black/40 border-2 border-yellow-500/50 p-4 rounded-xl shadow-xl leading-tight">
-                    {roomData.finalPunishment}
-                  </div>
+
+              {/* 文字跳動效果/結果顯示 */}
+              <div className="mb-4">
+                <div className={`text-yellow-400 font-black text-2xl md:text-3xl text-center bg-black/40 border-2 ${showFinalResult ? 'border-yellow-500/80' : 'border-slate-700/50'} p-4 rounded-xl shadow-xl leading-tight transition-all`}>
+                  {roomData.isSpinning || !showFinalResult ? randomText : roomData.finalPunishment}
                 </div>
-              )}
+              </div>
 
               {/* 按鈕區 */}
               <div className="space-y-3">
@@ -1129,7 +1158,7 @@ const App = () => {
                 )}
 
                 {/* 只有結果出來後才顯示離開按鈕 */}
-                {roomData.finalPunishment && (
+                {roomData.finalPunishment && showFinalResult && (
                   <Button variant="secondary" onClick={leaveRoom} className="w-full bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white py-4 animate-fade-in">
                     <LogOut size={20} /> 結束遊戲離開房間
                   </Button>
