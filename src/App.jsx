@@ -100,7 +100,7 @@ const RouletteWheel = ({ items, targetItem, isSpinning, className }) => {
 
       setRotation(baseRotation);
     }
-  }, [targetItem, items]); // 移除 isSpinning 依賴，只要有 targetItem 就轉
+  }, [targetItem, items]); // 移除 isSpinning 依賴，只要有 targetItem 就轉，避免因為狀態變動重轉
 
   const colors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#a855f7', '#ec4899', '#6366f1'];
 
@@ -259,11 +259,12 @@ const App = () => {
     setToast(msg);
   };
 
-  // 確保懲罰池排序一致 (Memoized & Sorted)
+  // 🔒 確保懲罰池在所有客戶端排序一致 (Memoized & Sorted)
   const punishmentPool = useMemo(() => {
     const punishments = roomData?.punishments ? Object.values(roomData.punishments) : [];
-    if (punishments.length === 0) return RANDOM_PUNISHMENTS.sort(); // 預設也要排序
-    return punishments.sort(); // 關鍵：強制排序，確保所有人看到的順序一致
+    if (punishments.length === 0) return RANDOM_PUNISHMENTS.sort((a, b) => a.localeCompare(b));
+    // ⚠️ 關鍵修正：使用 localeCompare 確保中文字串排序在所有裝置一致
+    return punishments.sort((a, b) => a.localeCompare(b));
   }, [roomData?.punishments]);
 
   if (!isConfigured) {
@@ -335,9 +336,8 @@ const App = () => {
         if (data.isSpinning && !showFinalResult) {
           setShowFinalResult(false);
           const interval = setInterval(() => {
-            // 使用上面 memo 的 pool (雖然這裡無法直接存取 memo，但邏輯一致即可)
-            // 這裡僅作視覺效果，不影響結果
-            const p = data.punishments ? Object.values(data.punishments) : RANDOM_PUNISHMENTS;
+            // 使用 punishmentPool (雖無法直接取用 memo，但邏輯保持一致)
+            let p = data.punishments ? Object.values(data.punishments) : RANDOM_PUNISHMENTS;
             setRandomText(p[Math.floor(Math.random() * p.length)]);
           }, 100);
 
@@ -387,7 +387,7 @@ const App = () => {
       }
     });
     return () => unsubscribe();
-  }, [user, roomId]); // 注意：這裡拿掉了 showFinalResult 依賴以避免迴圈
+  }, [user, roomId]); // ⚠️ 注意：這裡拿掉了 showFinalResult 依賴以避免無限重繪
 
   // --- 動作函式 ---
 
@@ -411,6 +411,7 @@ const App = () => {
       showToast("房間已清除 👋");
     } else {
       let updates = { participants: newParticipants };
+      // 主持人離開不轉移權限
       await updateDoc(roomRef, updates);
     }
 
@@ -608,23 +609,21 @@ const App = () => {
 
   const submitVotes = async () => {
     const updates = { [`votingStatus.${user.uid}`]: true };
-
     Object.keys(roomData.participants).forEach(targetUid => {
       if (targetUid === user.uid) return;
-      const score = myVotes[targetUid] || 1; // 預設 1
+      const score = myVotes[targetUid] || 1;
       updates[`ratings.${targetUid}.${user.uid}`] = score;
     });
-
     await updateRoom(updates);
     showToast("評分已送出！等待開票...");
   };
 
   // 抽獎邏輯 (主持人執行)
   const spinPunishment = async () => {
-    // 1. 使用跟前端一致的排序邏輯取得清單
     let pool = Object.values(roomData.punishments || {});
     if (pool.length === 0) pool = RANDOM_PUNISHMENTS;
-    pool.sort(); // ⚠️ 關鍵：後端計算也要排序，確保 index 一致
+    // ⚠️ 關鍵：後端也要排序，確保 index 對應正確
+    pool.sort((a, b) => a.localeCompare(b));
 
     const final = pool[Math.floor(Math.random() * pool.length)];
 
