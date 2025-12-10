@@ -700,7 +700,8 @@ const App = () => {
   if (!roomData) return <div className="h-screen flex items-center justify-center bg-slate-900 text-white">讀取房間資料中...</div>;
 
   const isHost = user.uid === roomData.hostId;
-  const participantList = Object.entries(roomData.participants).sort((a, b) => a[0].localeCompare(b[0]));
+  // 修改排序邏輯：以名字排序，比較好找人
+  const participantList = Object.entries(roomData.participants).sort((a, b) => a[1].localeCompare(b[1]));
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-emerald-950 to-slate-950 font-sans text-white relative pb-20 overflow-hidden">
@@ -712,31 +713,60 @@ const App = () => {
         <CountdownDisplay onFinish={() => isHost && nextPhase('result')} />
       )}
 
-      {/* 頂部資訊列 (現在全頁面顯示) */}
-      <div className="bg-slate-900/80 backdrop-blur-md border-b border-white/5 sticky top-0 z-50 shadow-lg px-4 py-3">
-        <div className="flex justify-between items-center gap-3">
-          {/* 左邊：房間資訊與個人資訊 */}
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="bg-rose-600/90 text-white px-3 py-1 rounded text-xs font-bold shadow-lg shadow-rose-900/20 shrink-0 tracking-wider">Room {roomId}</div>
+      {/* 頂部資訊列 (全面升級版：顯示所有參加者 + 自適應高度) */}
+      <div className="bg-slate-900/95 backdrop-blur-md border-b border-white/5 sticky top-0 z-50 shadow-lg px-4 py-3 transition-all duration-300">
+        {/* 使用 flex-wrap 讓內容過多時自動換行 */}
+        <div className="flex flex-wrap items-center gap-3">
+
+          {/* 左側：房間與個人資訊 (保持不分開) */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="bg-rose-600/90 text-white px-3 py-1 rounded text-xs font-bold shadow-lg shadow-rose-900/20 shrink-0 tracking-wider">
+              Room {roomId}
+            </div>
             <div className="flex flex-col min-w-0">
-              <span className="font-bold truncate max-w-[120px] text-amber-50 text-sm leading-tight mb-0.5">{userName}</span>
-              {myNumber && <span className="text-[10px] text-amber-400 font-bold flex items-center gap-1"><Hash size={8} /> 你的號碼: {myNumber}</span>}
+              <span className="font-bold truncate max-w-[120px] text-amber-50 text-sm leading-tight mb-0.5">
+                {userName}
+              </span>
+              {myNumber && (
+                <span className="text-[10px] text-amber-400 font-bold flex items-center gap-1">
+                  <Hash size={8} /> No. {myNumber}
+                </span>
+              )}
             </div>
           </div>
 
-          {/* 中間：人數 */}
-          <div className="text-xs text-slate-400 flex items-center gap-1.5 bg-slate-800/50 px-3 py-1 rounded-full shrink-0 border border-white/5">
-            <Users size={12} className="text-emerald-400" /> {participantList.length}
+          {/* 分隔線 (僅在大螢幕顯示) */}
+          <div className="h-6 w-px bg-white/10 hidden sm:block shrink-0"></div>
+
+          {/* 中間：參加者名單 (彈性區域，過多會自動換行變高) */}
+          <div className="flex-1 flex flex-wrap items-center gap-2 min-w-[200px]">
+            <div className="text-xs text-slate-500 flex items-center gap-1 mr-1">
+              <Users size={12} /> {participantList.length}
+            </div>
+            {participantList.map(([uid, name]) => (
+              <span
+                key={uid}
+                className={`text-xs px-2 py-1 rounded-full border transition-all ${uid === user.uid
+                    ? 'bg-amber-500/20 border-amber-500/50 text-amber-200 font-bold shadow-[0_0_10px_rgba(245,158,11,0.2)]'
+                    : 'bg-slate-800/50 border-white/10 text-slate-400'
+                  }`}
+              >
+                {name}
+              </span>
+            ))}
           </div>
 
-          {/* 右邊：離開按鈕 */}
-          <button
-            onClick={leaveRoom}
-            className="shrink-0 bg-slate-800/50 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-white/5 p-2 rounded-lg transition-colors"
-            title="離開房間"
-          >
-            <LogOut size={18} />
-          </button>
+          {/* 右側：離開按鈕 (強制推到最右邊) */}
+          <div className="ml-auto shrink-0">
+            <button
+              onClick={leaveRoom}
+              className="bg-slate-800/50 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-white/5 p-2 rounded-lg transition-colors"
+              title="離開房間"
+            >
+              <LogOut size={18} />
+            </button>
+          </div>
+
         </div>
       </div>
 
