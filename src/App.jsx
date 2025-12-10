@@ -1049,11 +1049,11 @@ const App = () => {
           </div>
         )}
 
-        {/* --- 階段 7: 懲罰揭曉 (修正版：移除 flex-1 讓內容置中) --- */}
+        {/* --- 階段 7: 懲罰揭曉 (修正版：排版優化) --- */}
         {roomData.phase === 'punishment-reveal' && (
-          <div className="animate-fade-in flex flex-col h-full w-full max-w-md mx-auto relative overflow-hidden justify-center gap-8">
+          <div className="animate-fade-in flex flex-col h-full w-full max-w-md mx-auto relative overflow-hidden justify-center px-6">
 
-            {/* 1. 雷王資訊 */}
+            {/* 1. 雷王資訊 (與下方看板貼近) */}
             {(() => {
               const sorted = (roomData.finalResults || []).sort((a, b) => b.totalScore - a.totalScore);
               const maxScore = sorted[0]?.totalScore;
@@ -1062,25 +1062,29 @@ const App = () => {
               if (losers.length === 0) return null;
 
               return (
-                <div className="shrink-0 text-center py-2 relative z-20 mt-2">
-                  <p className="text-slate-500 text-[10px] uppercase tracking-[0.2em] mb-1">The Loser is</p>
-                  <div className="flex flex-col items-center gap-1">
+                <div className="shrink-0 text-center relative z-20 mb-6">
+                  <p className="text-slate-500 text-[10px] uppercase tracking-[0.2em] mb-2">The Loser is</p>
+
+                  {/* 改為 flex-row 避免多人時垂直太長 */}
+                  <div className="flex flex-wrap justify-center gap-4 items-end">
                     {losers.map(loser => (
                       <div key={loser.uid} className="flex flex-col items-center">
-                        <h2 className="text-3xl font-black text-rose-500 drop-shadow-[0_0_15px_rgba(225,29,72,0.6)] leading-none flex items-center gap-1">
-                          {losers.length > 1 && <span className="text-xl animate-bounce">👑</span>}
+                        <h2 className="text-4xl font-black text-rose-500 drop-shadow-[0_0_20px_rgba(225,29,72,0.8)] leading-none flex items-center gap-2">
+                          {losers.length > 1 && <span className="text-2xl animate-bounce">👑</span>}
                           {loser.name}
                         </h2>
                       </div>
                     ))}
-                    <span className="text-xs font-bold text-white bg-rose-600 px-2 py-0.5 rounded-full shadow-lg mt-1">{maxScore} 分</span>
+                  </div>
+                  <div className="mt-3">
+                    <span className="text-xs font-bold text-white bg-rose-600 px-3 py-1 rounded-full shadow-lg border border-rose-400">{maxScore} 分</span>
                   </div>
                 </div>
               );
             })()}
 
-            {/* 2. 數位抽獎看板 (修正：移除 flex-1，使用 w-full 讓其自然高度) */}
-            <div className="w-full flex flex-col items-center justify-center p-2 gap-2 my-4">
+            {/* 2. 數位抽獎看板 (緊鄰上方) */}
+            <div className="w-full relative z-20">
               <PunishmentSlotMachine
                 text={roomData.isSpinning || !roomData.finalPunishment ? randomText : roomData.finalPunishment}
                 isSpinning={roomData.isSpinning}
@@ -1088,11 +1092,11 @@ const App = () => {
               />
             </div>
 
-            {/* 3. 按鈕區 (修正：移除固定底部樣式，讓它自然跟隨在下方) */}
-            <div className="shrink-0 w-full relative z-30 px-4">
-              <div className="space-y-2">
+            {/* 3. 按鈕區 (獨立於下方) */}
+            <div className="w-full mt-10 relative z-30">
+              <div className="space-y-3">
                 {isHost && !roomData.finalPunishment && (
-                  <Button variant="neutral" size="lg" onClick={spinPunishment} className="w-full text-lg py-3 shadow-lg shadow-blue-900/20" disabled={roomData.isSpinning}>
+                  <Button variant="neutral" size="lg" onClick={spinPunishment} className="w-full text-lg py-4 shadow-xl shadow-blue-900/30 border border-slate-600" disabled={roomData.isSpinning}>
                     {roomData.isSpinning ? "🎲 抽選中..." : "🎲 抽出懲罰"}
                   </Button>
                 )}
@@ -1103,8 +1107,8 @@ const App = () => {
 
                 {/* 結果出來後顯示 */}
                 {roomData.finalPunishment && !roomData.isSpinning && (
-                  <Button variant="secondary" onClick={leaveRoom} className="w-full bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white py-3 animate-fade-in">
-                    <LogOut size={18} /> 結束遊戲並清除房間
+                  <Button variant="secondary" onClick={leaveRoom} className="w-full bg-emerald-600 border-emerald-500 text-white hover:bg-emerald-500 py-4 text-lg font-bold shadow-2xl animate-fade-in">
+                    <LogOut size={20} /> 結束遊戲並清除房間
                   </Button>
                 )}
               </div>
