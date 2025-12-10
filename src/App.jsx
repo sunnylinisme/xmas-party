@@ -87,11 +87,11 @@ const Toast = ({ message, onClose }) => {
 // --- 新版：數位抽獎看板 (Slot Machine Box) ---
 const PunishmentSlotMachine = ({ text, isSpinning, hasResult }) => {
   return (
-    <div className="w-full max-w-sm mx-auto my-4 relative">
+    <div className="w-full max-w-sm mx-auto my-2 relative">
       {/* 外框裝飾 */}
       <div className={`absolute -inset-1 rounded-2xl blur opacity-75 transition-all duration-300 ${isSpinning ? 'bg-gradient-to-r from-yellow-400 via-red-500 to-pink-500 animate-pulse' : hasResult ? 'bg-gradient-to-r from-red-600 to-rose-600' : 'bg-slate-700'}`}></div>
 
-      <div className="relative bg-slate-900 rounded-xl border-2 border-slate-700 p-8 min-h-[200px] flex flex-col items-center justify-center text-center shadow-2xl overflow-hidden">
+      <div className="relative bg-slate-900 rounded-xl border-2 border-slate-700 p-6 min-h-[160px] flex flex-col items-center justify-center text-center shadow-2xl overflow-hidden">
         {/* 背景網格線效果 */}
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:20px_20px]"></div>
 
@@ -676,7 +676,7 @@ const App = () => {
 
             <div className="pt-8 border-t border-white/5">
               <button onClick={handleLogout} className="flex items-center justify-center gap-2 mx-auto text-sm text-slate-500 hover:text-slate-300 transition-colors">
-                <RotateCcw size={14} /> 重置身份
+                <RotateCcw size={14} /> 重置身份 (測試用)
               </button>
             </div>
           </div>
@@ -1041,7 +1041,7 @@ const App = () => {
             })()}
 
             {/* 2. 數位抽獎看板 (Flexible Center) */}
-            <div className="flex-1 flex flex-col items-center justify-center p-6 min-h-0">
+            <div className="flex-1 flex flex-col items-center justify-center p-2 min-h-0">
               <PunishmentSlotMachine
                 text={roomData.isSpinning || !roomData.finalPunishment ? randomText : roomData.finalPunishment}
                 isSpinning={roomData.isSpinning}
