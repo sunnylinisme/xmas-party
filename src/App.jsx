@@ -84,10 +84,10 @@ const Toast = ({ message, onClose }) => {
   );
 };
 
-// --- 新版：數位抽獎看板 (Slot Machine Box) ---
+// --- 數位抽獎看板 (Slot Machine Box) ---
 const PunishmentSlotMachine = ({ text, isSpinning, hasResult }) => {
   return (
-    <div className="w-full max-w-sm mx-auto my-2 relative">
+    <div className="w-full max-w-sm mx-auto my-2 relative transition-all duration-500">
       {/* 外框裝飾 */}
       <div className={`absolute -inset-1 rounded-2xl blur opacity-75 transition-all duration-300 ${isSpinning ? 'bg-gradient-to-r from-yellow-400 via-red-500 to-pink-500 animate-pulse' : hasResult ? 'bg-gradient-to-r from-red-600 to-rose-600' : 'bg-slate-700'}`}></div>
 
@@ -234,7 +234,7 @@ const App = () => {
     setToast(msg);
   };
 
-  // 🔒 確保懲罰池一致 (雖然現在沒輪盤了，但文字跳動還是用這個池)
+  // 🔒 確保懲罰池一致
   const punishmentPool = useMemo(() => {
     const punishments = roomData?.punishments ? Object.values(roomData.punishments) : [];
     const pool = punishments.length === 0 ? [...RANDOM_PUNISHMENTS] : punishments;
@@ -728,7 +728,7 @@ const App = () => {
         </div>
       </div>
 
-      <main className={`relative z-10 max-w-3xl mx-auto p-4 flex flex-col gap-8 ${roomData.phase === 'punishment-reveal' ? 'h-screen p-0 m-0 max-w-none' : 'mt-6'}`}>
+      <main className={`relative z-10 max-w-3xl mx-auto p-4 flex flex-col gap-8 ${roomData.phase === 'punishment-reveal' ? 'h-screen p-0 m-0 max-w-none justify-center' : 'mt-6'}`}>
 
         {/* --- 階段 1: 等待大廳 (Entry) --- */}
         {roomData.phase === 'entry' && (
@@ -853,7 +853,7 @@ const App = () => {
 
               <div className="mb-6">
                 <textarea
-                  className="w-full p-5 bg-slate-800/50 border border-slate-600 rounded-2xl focus:border-rose-500 outline-none resize-none text-xl text-white placeholder-slate-600 min-h-[160px]"
+                  className="w-full p-5 bg-slate-800/50 border border-slate-600 rounded-2xl focus:border-red-500 outline-none resize-none text-xl text-white placeholder-slate-600 min-h-[160px]"
                   placeholder="例：用屁股寫字..."
                   value={myPunishmentInput}
                   onChange={e => setMyPunishmentInput(e.target.value)}
@@ -1020,21 +1020,31 @@ const App = () => {
           </div>
         )}
 
-        {/* --- 階段 7: 懲罰揭曉 (Slot Machine Style) --- */}
+        {/* --- 階段 7: 懲罰揭曉 (Compact Layout) --- */}
         {roomData.phase === 'punishment-reveal' && (
-          <div className="animate-fade-in flex flex-col h-[calc(100vh-20px)] w-full max-w-md mx-auto relative overflow-hidden">
+          <div className="animate-fade-in flex flex-col h-[calc(100vh-20px)] w-full max-w-md mx-auto relative overflow-hidden justify-center">
 
-            {/* 1. 雷王資訊 (Fixed Top) */}
+            {/* 1. 雷王資訊 (Compact - with Multi-Winner) */}
             {(() => {
-              const loser = (roomData.finalResults || []).sort((a, b) => b.totalScore - a.totalScore)[0];
-              if (!loser) return null;
+              const sorted = (roomData.finalResults || []).sort((a, b) => b.totalScore - a.totalScore);
+              const maxScore = sorted[0]?.totalScore;
+              const losers = sorted.filter(r => r.totalScore === maxScore);
+
+              if (losers.length === 0) return null;
 
               return (
-                <div className="shrink-0 text-center py-4 bg-slate-900/50 border-b border-white/10 relative z-20 mt-12">
-                  <p className="text-slate-500 text-xs uppercase tracking-[0.2em] mb-1">The Loser is</p>
-                  <div className="flex flex-col items-center gap-1">
-                    <h2 className="text-4xl font-black text-rose-500 drop-shadow-[0_0_15px_rgba(225,29,72,0.6)] leading-none">{loser.name}</h2>
-                    <span className="text-sm font-bold text-white bg-rose-600 px-3 py-0.5 rounded-full shadow-lg">{loser.totalScore} 分</span>
+                <div className="shrink-0 text-center py-4 bg-slate-900/50 border-b border-white/10 relative z-20">
+                  <p className="text-slate-500 text-xs uppercase tracking-[0.2em] mb-2">The Loser is</p>
+                  <div className="flex flex-col items-center gap-3">
+                    {losers.map(loser => (
+                      <div key={loser.uid} className="flex flex-col items-center">
+                        <h2 className="text-4xl font-black text-rose-500 drop-shadow-[0_0_15px_rgba(225,29,72,0.6)] leading-none flex items-center gap-2">
+                          {losers.length > 1 && <span className="text-2xl animate-bounce">👑</span>}
+                          {loser.name}
+                        </h2>
+                      </div>
+                    ))}
+                    <span className="text-sm font-bold text-white bg-rose-600 px-3 py-0.5 rounded-full shadow-lg mt-1">{maxScore} 分</span>
                   </div>
                 </div>
               );
