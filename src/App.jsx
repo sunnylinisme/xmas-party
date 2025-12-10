@@ -58,15 +58,6 @@ const RANDOM_PUNISHMENTS = [
   "去隔壁桌/路人說「我是聖誕老公公」"
 ];
 
-// --- 評分說明邏輯 ---
-const getRatingLabel = (score) => {
-  if (score <= 10) return { text: "😇 天使好禮", color: "text-emerald-400" };
-  if (score <= 20) return { text: "🙂 還算實用", color: "text-blue-300" };
-  if (score <= 30) return { text: "😐 微妙...不好說", color: "text-amber-400" };
-  if (score <= 40) return { text: "🤔 有點雷喔", color: "text-orange-400" };
-  return { text: "☠️ 恭喜! 超~級~雷~", color: "text-rose-500 font-black animate-pulse" };
-};
-
 // --- Toast 通知元件 ---
 const Toast = ({ message, onClose }) => {
   useEffect(() => {
@@ -596,7 +587,7 @@ const App = () => {
   const submitPunishmentInput = async () => {
     if (!myPunishmentInput.trim()) return;
     await updateRoom({ [`punishments.${user.uid}`]: myPunishmentInput });
-    showToast("惡作劇已送出！嘿嘿嘿...");
+    showToast("規則已送出！嘿嘿嘿...");
   };
 
   const nextRule = async () => {
@@ -662,7 +653,7 @@ const App = () => {
             </div>
           </div>
           <h1 className="text-4xl font-black mb-3 bg-clip-text text-transparent bg-gradient-to-r from-amber-200 to-yellow-500 drop-shadow-sm">
-            2025 交換禮物
+            交換禮物派對
           </h1>
           <div className="flex items-center justify-center gap-2 mb-10">
             <Trees className="text-emerald-500" size={18} />
@@ -697,7 +688,7 @@ const App = () => {
 
             <div className="pt-8 border-t border-white/5">
               <button onClick={handleLogout} className="flex items-center justify-center gap-2 mx-auto text-sm text-slate-500 hover:text-slate-300 transition-colors">
-                <RotateCcw size={14} /> 重置身份 (測試用)
+                <RotateCcw size={14} /> 重置欄位
               </button>
             </div>
           </div>
@@ -1010,7 +1001,7 @@ const App = () => {
 
             <div className="text-center mb-10">
               <h2 className="text-5xl font-black text-amber-400 drop-shadow-xl mb-3 flex items-center justify-center gap-3">
-                <Star fill="currentColor" size={40} /> 本日最雷王誕生 <Star fill="currentColor" size={40} />
+                <Star fill="currentColor" size={40} /> 本日禮物最雷王誕生 <Star fill="currentColor" size={40} />
               </h2>
               <p className="text-slate-400 text-lg">恭喜以下得主獲得大家的怨念</p>
             </div>
@@ -1051,7 +1042,8 @@ const App = () => {
 
         {/* --- 階段 7: 懲罰揭曉 (修正版：排版優化) --- */}
         {roomData.phase === 'punishment-reveal' && (
-          <div className="animate-fade-in flex flex-col h-full w-full max-w-md mx-auto relative overflow-hidden justify-center px-6">
+          // 修改處：移除 justify-center，改用 pt-28 來控制上方距離
+          <div className="animate-fade-in flex flex-col h-full w-full max-w-md mx-auto relative overflow-hidden pt-28 px-6">
 
             {/* 1. 雷王資訊 (與下方看板貼近) */}
             {(() => {
@@ -1108,7 +1100,7 @@ const App = () => {
                 {/* 結果出來後顯示 */}
                 {roomData.finalPunishment && !roomData.isSpinning && (
                   <Button variant="secondary" onClick={leaveRoom} className="w-full bg-emerald-600 border-emerald-500 text-white hover:bg-emerald-500 py-4 text-lg font-bold shadow-2xl animate-fade-in">
-                    <LogOut size={20} /> 結束遊戲並清除房間
+                    <LogOut size={20} /> 結束遊戲並退出房間
                   </Button>
                 )}
               </div>
