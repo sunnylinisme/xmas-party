@@ -1049,11 +1049,11 @@ const App = () => {
           </div>
         )}
 
-        {/* --- 階段 7: 懲罰揭曉 (Compact Layout - Updated) --- */}
+        {/* --- 階段 7: 懲罰揭曉 (修正版：移除 flex-1 讓內容置中) --- */}
         {roomData.phase === 'punishment-reveal' && (
-          <div className="animate-fade-in flex flex-col h-full w-full max-w-md mx-auto relative overflow-hidden justify-center">
+          <div className="animate-fade-in flex flex-col h-full w-full max-w-md mx-auto relative overflow-hidden justify-center gap-8">
 
-            {/* 1. 雷王資訊 (Fixed Top with Multi-Winner) */}
+            {/* 1. 雷王資訊 */}
             {(() => {
               const sorted = (roomData.finalResults || []).sort((a, b) => b.totalScore - a.totalScore);
               const maxScore = sorted[0]?.totalScore;
@@ -1062,7 +1062,7 @@ const App = () => {
               if (losers.length === 0) return null;
 
               return (
-                <div className="shrink-0 text-center py-2 bg-slate-900/50 border-b border-white/10 relative z-20 mt-2">
+                <div className="shrink-0 text-center py-2 relative z-20 mt-2">
                   <p className="text-slate-500 text-[10px] uppercase tracking-[0.2em] mb-1">The Loser is</p>
                   <div className="flex flex-col items-center gap-1">
                     {losers.map(loser => (
@@ -1079,8 +1079,8 @@ const App = () => {
               );
             })()}
 
-            {/* 2. 數位抽獎看板 (Flexible Center) */}
-            <div className="flex-1 flex flex-col items-center justify-center p-2 min-h-0 gap-2">
+            {/* 2. 數位抽獎看板 (修正：移除 flex-1，使用 w-full 讓其自然高度) */}
+            <div className="w-full flex flex-col items-center justify-center p-2 gap-2 my-4">
               <PunishmentSlotMachine
                 text={roomData.isSpinning || !roomData.finalPunishment ? randomText : roomData.finalPunishment}
                 isSpinning={roomData.isSpinning}
@@ -1088,8 +1088,8 @@ const App = () => {
               />
             </div>
 
-            {/* 3. 按鈕區 (Fixed Bottom) */}
-            <div className="shrink-0 p-4 w-full relative z-30 pb-safe bg-slate-900/50 backdrop-blur-sm">
+            {/* 3. 按鈕區 (修正：移除固定底部樣式，讓它自然跟隨在下方) */}
+            <div className="shrink-0 w-full relative z-30 px-4">
               <div className="space-y-2">
                 {isHost && !roomData.finalPunishment && (
                   <Button variant="neutral" size="lg" onClick={spinPunishment} className="w-full text-lg py-3 shadow-lg shadow-blue-900/20" disabled={roomData.isSpinning}>
