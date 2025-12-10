@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, memo, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, getDoc, deleteDoc, deleteField, increment } from 'firebase/firestore';
-import { Gift, Users, ArrowRight, Zap, Skull, Play, Edit3, AlertTriangle, LogIn, Share2, Link as LinkIcon, RotateCcw, Shuffle, Star, Save, X, LogOut, Info, CheckCircle, Clock, Bomb, Hash, Lightbulb, Ticket, Trees, Snowflake } from 'lucide-react';
+import { Gift, Users, ArrowRight, Zap, Skull, Play, Edit3, AlertTriangle, LogIn, Share2, Link as LinkIcon, RotateCcw, Shuffle, Star, Save, X, LogOut, Info, CheckCircle, Clock, Bomb, Hash, Lightbulb, Ticket, Trees, Snowflake, ChevronDown } from 'lucide-react';
 
 // ==========================================
 // ⚠️ 你的 Firebase 設定
@@ -87,17 +87,17 @@ const Toast = ({ message, onClose }) => {
 // --- 數位抽獎看板 (Slot Machine Box) ---
 const PunishmentSlotMachine = ({ text, isSpinning, hasResult }) => {
   return (
-    <div className="w-full max-w-sm mx-auto my-2 relative transition-all duration-500">
+    <div className="w-full max-w-xs mx-auto relative transition-all duration-500">
       {/* 外框裝飾 */}
       <div className={`absolute -inset-1 rounded-2xl blur opacity-75 transition-all duration-300 ${isSpinning ? 'bg-gradient-to-r from-yellow-400 via-red-500 to-pink-500 animate-pulse' : hasResult ? 'bg-gradient-to-r from-red-600 to-rose-600' : 'bg-slate-700'}`}></div>
 
-      <div className="relative bg-slate-900 rounded-xl border-2 border-slate-700 p-6 min-h-[160px] flex flex-col items-center justify-center text-center shadow-2xl overflow-hidden">
+      <div className="relative bg-slate-900 rounded-xl border-2 border-slate-700 p-4 min-h-[140px] flex flex-col items-center justify-center text-center shadow-2xl overflow-hidden">
         {/* 背景網格線效果 */}
         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:20px_20px]"></div>
 
         {/* 上方標題 */}
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 text-slate-500 text-xs font-bold tracking-[0.2em] uppercase">
-          <Ticket size={12} /> Punishment
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 flex items-center gap-2 text-slate-500 text-[10px] font-bold tracking-[0.2em] uppercase">
+          <Ticket size={10} /> Punishment
         </div>
 
         {/* 核心文字顯示區 */}
@@ -112,45 +112,66 @@ const PunishmentSlotMachine = ({ text, isSpinning, hasResult }) => {
   );
 };
 
-// --- 獨立的雪花背景元件 ---
+// --- 獨立的雪花背景元件 (修正版：全螢幕 Fixed + Reroll X Position) ---
 const SnowBackground = memo(() => {
   const canvasRef = useRef(null);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
+
     const setSize = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
     };
     setSize();
-    const snowflakes = Array.from({ length: 50 }).map(() => ({
+
+    const snowflakes = Array.from({ length: 60 }).map(() => ({
       x: Math.random() * canvas.width,
       y: Math.random() * canvas.height,
       radius: Math.random() * 2 + 1,
-      speed: Math.random() * 1 + 0.5
+      speed: Math.random() * 1 + 0.5,
+      drift: (Math.random() - 0.5) * 0.5 // 左右漂移因子
     }));
+
     let animationFrameId;
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = 'rgba(255, 250, 240, 0.2)';
+      ctx.fillStyle = 'rgba(255, 250, 240, 0.25)'; // 稍微亮一點
+
       snowflakes.forEach(flake => {
         ctx.beginPath();
         ctx.arc(flake.x, flake.y, flake.radius, 0, Math.PI * 2);
         ctx.fill();
+
+        // 更新位置
         flake.y += flake.speed;
-        if (flake.y > canvas.height) flake.y = 0;
+        flake.x += flake.drift; // 加上水平漂移
+
+        // 重置邏輯：當雪花落到底部
+        if (flake.y > canvas.height) {
+          flake.y = 0;
+          // 關鍵修正：重新隨機分配 X，確保適應當前寬度
+          flake.x = Math.random() * canvas.width;
+        }
+
+        // 左右邊界循環
+        if (flake.x > canvas.width) flake.x = 0;
+        if (flake.x < 0) flake.x = canvas.width;
       });
       animationFrameId = requestAnimationFrame(draw);
     }
     draw();
+
     window.addEventListener('resize', setSize);
     return () => {
       window.removeEventListener('resize', setSize);
       cancelAnimationFrame(animationFrameId);
     };
   }, []);
-  return <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full pointer-events-none z-0" />;
+
+  // 關鍵修正：使用 fixed 覆蓋全視窗，避免被內容撐開變形
+  return <canvas ref={canvasRef} className="fixed top-0 left-0 w-full h-full pointer-events-none z-0" />;
 });
 
 // --- UI 元件 ---
@@ -728,7 +749,7 @@ const App = () => {
         </div>
       </div>
 
-      <main className={`relative z-10 max-w-3xl mx-auto p-4 flex flex-col gap-8 ${roomData.phase === 'punishment-reveal' ? 'h-screen p-0 m-0 max-w-none justify-center' : 'mt-6'}`}>
+      <main className={`relative z-10 max-w-3xl mx-auto p-4 flex flex-col gap-8 ${roomData.phase === 'punishment-reveal' ? 'h-screen p-0 m-0 max-w-none' : 'mt-6'}`}>
 
         {/* --- 階段 1: 等待大廳 (Entry) --- */}
         {roomData.phase === 'entry' && (
@@ -853,7 +874,7 @@ const App = () => {
 
               <div className="mb-6">
                 <textarea
-                  className="w-full p-5 bg-slate-800/50 border border-slate-600 rounded-2xl focus:border-red-500 outline-none resize-none text-xl text-white placeholder-slate-600 min-h-[160px]"
+                  className="w-full p-5 bg-slate-800/50 border border-slate-600 rounded-2xl focus:border-rose-500 outline-none resize-none text-xl text-white placeholder-slate-600 min-h-[160px]"
                   placeholder="例：用屁股寫字..."
                   value={myPunishmentInput}
                   onChange={e => setMyPunishmentInput(e.target.value)}
@@ -994,21 +1015,29 @@ const App = () => {
               <p className="text-slate-400 text-lg">恭喜以下得主獲得大家的怨念</p>
             </div>
 
-            {/* 使用 Snapshot 資料 (finalResults) 渲染 */}
-            {(roomData.finalResults || []).sort((a, b) => b.totalScore - a.totalScore).slice(0, 3).map((item, idx) => (
-              <div key={item.uid} className={`relative rounded-3xl p-6 shadow-xl flex items-center gap-5 border ${idx === 0 ? 'bg-gradient-to-r from-amber-900/80 to-slate-900 border-amber-500 transform scale-105 z-10' : 'bg-slate-800/80 border-slate-700'}`}>
-                {idx === 0 && <div className="absolute -top-4 -right-3 text-5xl animate-bounce">👑</div>}
-                <div className={`w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-2xl shrink-0 ${idx === 0 ? 'bg-amber-500 shadow-lg shadow-amber-500/50' : idx === 1 ? 'bg-slate-500' : 'bg-orange-700'}`}>#{idx + 1}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-bold text-white text-2xl truncate mb-1">{item.name}</div>
-                  <div className="text-base text-slate-400 truncate">{item.giftName}</div>
+            {/* 使用 Snapshot 資料 (finalResults) 渲染，處理並列第一 */}
+            {(roomData.finalResults || []).sort((a, b) => b.totalScore - a.totalScore).map((item, idx, arr) => {
+              const isTie = idx > 0 && item.totalScore === arr[idx - 1].totalScore;
+              const isFirst = item.totalScore === arr[0].totalScore;
+
+              // 只顯示前三名，但如果有並列第三也要顯示
+              if (idx >= 3 && !isFirst && item.totalScore !== arr[2].totalScore) return null;
+
+              return (
+                <div key={item.uid} className={`relative rounded-3xl p-6 shadow-xl flex items-center gap-5 border ${isFirst ? 'bg-gradient-to-r from-amber-900/80 to-slate-900 border-amber-500 transform scale-105 z-10' : 'bg-slate-800/80 border-slate-700'}`}>
+                  {isFirst && <div className="absolute -top-4 -right-3 text-5xl animate-bounce">👑</div>}
+                  <div className={`w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-2xl shrink-0 ${isFirst ? 'bg-amber-500 shadow-lg shadow-amber-500/50' : idx === 1 ? 'bg-slate-500' : 'bg-orange-700'}`}>#{idx + 1}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-white text-2xl truncate mb-1">{item.name}</div>
+                    <div className="text-base text-slate-400 truncate">{item.giftName}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-4xl font-black text-rose-500">{item.totalScore}</div>
+                    <div className="text-xs text-slate-500 uppercase tracking-widest">Points</div>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-4xl font-black text-rose-500">{item.totalScore}</div>
-                  <div className="text-xs text-slate-500 uppercase tracking-widest">Points</div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
 
             {isHost && (
               <div className="mt-12 text-center">
@@ -1020,11 +1049,11 @@ const App = () => {
           </div>
         )}
 
-        {/* --- 階段 7: 懲罰揭曉 (Compact Layout) --- */}
+        {/* --- 階段 7: 懲罰揭曉 (Compact Layout - Updated) --- */}
         {roomData.phase === 'punishment-reveal' && (
-          <div className="animate-fade-in flex flex-col h-[calc(100vh-20px)] w-full max-w-md mx-auto relative overflow-hidden justify-center">
+          <div className="animate-fade-in flex flex-col h-full w-full max-w-md mx-auto relative overflow-hidden justify-center">
 
-            {/* 1. 雷王資訊 (Compact - with Multi-Winner) */}
+            {/* 1. 雷王資訊 (Fixed Top with Multi-Winner) */}
             {(() => {
               const sorted = (roomData.finalResults || []).sort((a, b) => b.totalScore - a.totalScore);
               const maxScore = sorted[0]?.totalScore;
@@ -1033,25 +1062,25 @@ const App = () => {
               if (losers.length === 0) return null;
 
               return (
-                <div className="shrink-0 text-center py-4 bg-slate-900/50 border-b border-white/10 relative z-20">
-                  <p className="text-slate-500 text-xs uppercase tracking-[0.2em] mb-2">The Loser is</p>
-                  <div className="flex flex-col items-center gap-3">
+                <div className="shrink-0 text-center py-2 bg-slate-900/50 border-b border-white/10 relative z-20 mt-2">
+                  <p className="text-slate-500 text-[10px] uppercase tracking-[0.2em] mb-1">The Loser is</p>
+                  <div className="flex flex-col items-center gap-1">
                     {losers.map(loser => (
                       <div key={loser.uid} className="flex flex-col items-center">
-                        <h2 className="text-4xl font-black text-rose-500 drop-shadow-[0_0_15px_rgba(225,29,72,0.6)] leading-none flex items-center gap-2">
-                          {losers.length > 1 && <span className="text-2xl animate-bounce">👑</span>}
+                        <h2 className="text-3xl font-black text-rose-500 drop-shadow-[0_0_15px_rgba(225,29,72,0.6)] leading-none flex items-center gap-1">
+                          {losers.length > 1 && <span className="text-xl animate-bounce">👑</span>}
                           {loser.name}
                         </h2>
                       </div>
                     ))}
-                    <span className="text-sm font-bold text-white bg-rose-600 px-3 py-0.5 rounded-full shadow-lg mt-1">{maxScore} 分</span>
+                    <span className="text-xs font-bold text-white bg-rose-600 px-2 py-0.5 rounded-full shadow-lg mt-1">{maxScore} 分</span>
                   </div>
                 </div>
               );
             })()}
 
             {/* 2. 數位抽獎看板 (Flexible Center) */}
-            <div className="flex-1 flex flex-col items-center justify-center p-2 min-h-0">
+            <div className="flex-1 flex flex-col items-center justify-center p-2 min-h-0 gap-2">
               <PunishmentSlotMachine
                 text={roomData.isSpinning || !roomData.finalPunishment ? randomText : roomData.finalPunishment}
                 isSpinning={roomData.isSpinning}
@@ -1060,22 +1089,22 @@ const App = () => {
             </div>
 
             {/* 3. 按鈕區 (Fixed Bottom) */}
-            <div className="shrink-0 p-6 w-full relative z-30 pb-safe bg-slate-900/50 backdrop-blur-sm">
-              <div className="space-y-3">
+            <div className="shrink-0 p-4 w-full relative z-30 pb-safe bg-slate-900/50 backdrop-blur-sm">
+              <div className="space-y-2">
                 {isHost && !roomData.finalPunishment && (
-                  <Button variant="neutral" size="lg" onClick={spinPunishment} className="w-full text-xl py-4 shadow-lg shadow-blue-900/20" disabled={roomData.isSpinning}>
+                  <Button variant="neutral" size="lg" onClick={spinPunishment} className="w-full text-lg py-3 shadow-lg shadow-blue-900/20" disabled={roomData.isSpinning}>
                     {roomData.isSpinning ? "🎲 抽選中..." : "🎲 抽出懲罰"}
                   </Button>
                 )}
 
                 {!isHost && !roomData.finalPunishment && (
-                  <div className="text-center text-slate-500 py-2 text-sm animate-pulse">等待主持人抽出懲罰...</div>
+                  <div className="text-center text-slate-500 py-2 text-xs animate-pulse">等待主持人抽出懲罰...</div>
                 )}
 
                 {/* 結果出來後顯示 */}
                 {roomData.finalPunishment && !roomData.isSpinning && (
-                  <Button variant="secondary" onClick={leaveRoom} className="w-full bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white py-4 animate-fade-in">
-                    <LogOut size={20} /> 結束遊戲並清除房間
+                  <Button variant="secondary" onClick={leaveRoom} className="w-full bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white py-3 animate-fade-in">
+                    <LogOut size={18} /> 結束遊戲並清除房間
                   </Button>
                 )}
               </div>
