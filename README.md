@@ -1,47 +1,80 @@
-🎄 聖誕交換禮物派對 (Xmas Gift Exchange Party)
+# 🎄 聖誕交換禮物派對 (Xmas Gift Exchange Party)
 
-這是一個專為線下聚會設計的 即時互動網頁應用程式 (Web App)。
-結合了 指令卡牌、即時投票 與 懲罰輪盤，解決傳統抽籤的無聊，讓交換禮物過程變得刺激又混亂！
+> 解決傳統抽籤的無聊，讓交換禮物過程變得刺激又混亂！
 
-✨ 功能特色 (Features)
+這是一個專為線下聚會設計的 **即時互動網頁應用程式 (Web App)**。
+結合了 **指令卡牌**、**即時投票** 與 **懲罰輪盤**，讓你的聖誕派對不再只是尷尬地遞禮物。
 
-⚡️ 即時同步 (Real-time)：基於 Firebase Firestore，所有參與者的畫面秒級同步。
+## 🚀 立即開始 (Play Now)
 
-🔗 智慧邀請 (Smart Invite)：複製連結即可自動帶入房間參數 (?room=xxxx)，親友免輸入代碼。
+**不需要安裝任何東西**，主持人點擊下方連結建立房間，將連結傳給朋友即可開始！
 
-🎁 盲盒機制：禮物內容直到評分階段才會揭曉。
+👉 [**前往遊戲大廳**]([https://sunnylinisme.github.io/xmas-party/]) 👈
 
-🗳️ 匿名評分：遊戲結束後對禮物進行「雷度」投票，即時計算排行榜。
+> 💡 **小撇步**：建議使用 **手機瀏覽器** 開啟，體驗最佳！
 
-☠️ 懲罰系統：內建數位老虎機 (Slot Machine)，由雷王抽取大家集思廣益的懲罰。
+## ✨ 功能特色 (Features)
 
-🛠️ 安裝與執行 (Installation)
+* **⚡️ 秒級同步 (Real-time)**
+  基於 Firebase Firestore，一人操作，全場手機畫面同步更新，氣氛零時差。
 
-如果你想在本地端執行或自行部署此專案，請參考以下步驟：
+* **🔗 智慧邀請 (Smart Invite)**
+  主持人複製連結，親友點開自動帶入房間代碼，**免輸入、免登入**。
 
-1. 下載專案
+* **🎁 盲盒機制**
+  禮物內容直到評分階段才會揭曉，保留神秘感。
 
-git clone [https://github.com/your-username/xmas-party.git](https://github.com/your-username/xmas-party.git)
+* **🗳️ 匿名評分**
+  交換結束後，針對拿到的禮物進行「雷度」評分 (1-10分)，系統自動計算排行榜。
+
+* **☠️ 數位懲罰盤**
+  內建拉霸機 (Slot Machine)，由 **「雷王」** 抽取大家集思廣益的懲罰，保證公平（且殘忍）。
+
+## 📱 遊戲流程 (Game Flow)
+
+1. **進入大廳**：主持人建立房間，分享連結給所有參與者。
+2. **登錄禮物**：每人輸入帶來的禮物內容（例如：星巴克馬克杯），系統會隨機分配每人一個代號。
+3. **制定規則 & 懲罰**：
+   - 每人出一張「交換指令牌」（如：*所有人往右傳*、*單數號碼起立*...）。
+   - 每人出一個「懲罰點子」（如：*屁股寫字*、*請全場喝飲料*...）。
+4. **遊戲進行**：系統將指令牌洗牌後依序顯示，所有人聽從手機指令動作。
+5. **評分與結算**：
+   - 交換結束，拆禮物。
+   - 針對「送禮者」進行雷度評分。
+   - 系統結算總分，**「雷王」** 誕生，並接受懲罰輪盤審判。
+
+## 👨‍💻 開發者專區 (For Developers)
+
+如果你想要修改程式碼、貢獻功能，或是想使用自己的 Firebase 資料庫自行部署，請參考以下步驟。
+
+### 安裝與執行
+
+**1. 下載專案**
+
+```bash
+git clone https://github.com/your-username/xmas-party.git
 cd xmas-party
+```
 
+**2. 安裝依賴**
 
-2. 安裝依賴
-
+```bash
 npm install
 # 或
 yarn install
+```
 
+**3. Firebase 設定 (必要)**
 
-3. Firebase 設定 (重要！)
+本專案依賴 Firebase 運作。你需要自行建立 Firebase 專案：
 
-本專案需要 Firebase 支援。請前往 Firebase Console 建立專案並開啟以下功能：
+1. 前往 [Firebase Console](https://console.firebase.google.com/)。
+2. 建立新專案，並開啟 **Authentication** > **Sign-in method** > 啟用 **匿名 (Anonymous)**。
+3. 開啟 **Firestore Database**，並建立資料庫。
+4. 複製你的專案設定 (Config)。
+5. 打開 `src/App.jsx`，找到 `firebaseConfig` 物件並替換為你的數值：
 
-Authentication: 啟用「匿名登入 (Anonymous)」。
-
-Firestore Database: 建立資料庫並設定適當的讀寫規則。
-
-接著，打開 src/App.jsx，將 firebaseConfig 物件替換為你的設定：
-
+```javascript
 const firebaseConfig = {
   apiKey: "YOUR_API_KEY",
   authDomain: "YOUR_PROJECT.firebaseapp.com",
@@ -50,53 +83,20 @@ const firebaseConfig = {
   messagingSenderId: "YOUR_SENDER_ID",
   appId: "YOUR_APP_ID"
 };
+```
 
+**4. 啟動開發伺服器**
 
-4. 啟動開發伺服器
-
+```bash
 npm run dev
+```
 
+打開瀏覽器前往 `http://localhost:5173` 即可開始開發。
 
-打開瀏覽器前往 http://localhost:5173 即可開始使用。
+### 🤝 貢獻 (Contributing)
 
-📱 遊戲流程 (Game Flow)
+歡迎提交 PR 來新增更多有趣的 **隨機規則庫** 或 **懲罰庫**！
 
-1️⃣ 進入大廳 (Lobby)
-
-主持人建立房間，分享連結。
-
-參與者點擊連結自動加入。
-
-2️⃣ 登錄禮物 (Gift Entry)
-
-系統分配每人一個隨機代號。
-
-參與者輸入禮物內容物（需寫清楚，例如：星巴克馬克杯），作為後續評分依據。
-
-3️⃣ 制定規則 & 懲罰 (Rules & Punishments)
-
-每人出一張「交換指令牌」（如：所有人往右傳）。
-
-每人出一個「懲罰點子」（如：屁股寫字）。
-
-4️⃣ 遊戲進行 (Gameplay)
-
-系統將指令牌洗牌後依序顯示。
-
-所有人依照畫面指令動作。
-
-5️⃣ 評分與結算 (Voting & Result)
-
-交換結束，拆禮物。
-
-針對「送禮者」進行雷度評分 (1-10分)。
-
-系統結算總分，分數最高者為「雷王」，需接受懲罰輪盤審判。
-
-🤝 貢獻 (Contributing)
-
-歡迎提交 PR 來新增更多有趣的 隨機規則庫 或 懲罰庫！
-
-📄 授權 (License)
+### 📄 授權 (License)
 
 MIT License
