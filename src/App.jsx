@@ -664,7 +664,25 @@ const App = () => {
     }
   };
 
-  if (loading) return <div className="h-screen flex items-center justify-center bg-slate-900 text-white">載入中...</div>;
+  if (loading) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-950 via-emerald-950 to-slate-950 text-white">
+        <div className="relative mb-6">
+          <div className="absolute inset-0 bg-rose-500/20 blur-xl rounded-full animate-pulse"></div>
+          <Gift size={64} className="text-rose-500 animate-bounce relative z-10" />
+          <Snowflake size={24} className="text-sky-300 absolute -top-2 -right-4 animate-spin" />
+          <Trees size={24} className="text-emerald-500 absolute -bottom-2 -left-4 animate-pulse" />
+        </div>
+        <p className="text-xl font-bold text-amber-400 tracking-[0.2em] animate-pulse">
+          LOADING...
+        </p>
+        <p className="text-sm text-slate-500 mt-2">
+          正在準備禮物與驚喜
+        </p>
+      </div>
+    );
+  }
+
 
   if (!isInRoom) {
     return (
