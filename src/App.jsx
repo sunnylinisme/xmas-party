@@ -170,6 +170,17 @@ const Card = ({ children, className = "" }) => (
   </div>
 );
 
+// 新增：流程說明元件
+const PhaseInstruction = ({ title, text }) => (
+  <div className="bg-sky-500/10 border border-sky-500/30 rounded-xl p-4 mb-6 flex items-start gap-3 animate-fade-in shadow-[0_0_15px_rgba(14,165,233,0.1)]">
+    <Info className="text-sky-400 shrink-0 mt-0.5" size={20} />
+    <div className="text-left">
+      <h3 className="font-bold text-sky-200 text-sm mb-1">{title}</h3>
+      <p className="text-sky-200/70 text-sm leading-relaxed">{text}</p>
+    </div>
+  </div>
+);
+
 const Button = ({ onClick, children, variant = 'primary', className = "", disabled = false, size = 'lg' }) => {
   const baseStyle = "rounded-full font-bold transition-all transform active:scale-95 shadow-lg flex items-center justify-center gap-2 select-none";
   const sizeStyles = {
@@ -282,10 +293,20 @@ const App = () => {
     }
   }, []);
 
+  // 新增：處理 URL 參數與自動填入 Room ID
   useEffect(() => {
     if (user && !isInRoom) {
-      const savedRoomId = localStorage.getItem('xmas_last_room_id');
-      if (savedRoomId) setRoomId(savedRoomId);
+      // 1. 優先檢查 URL 參數
+      const params = new URLSearchParams(window.location.search);
+      const urlRoomId = params.get('room');
+
+      if (urlRoomId) {
+        setRoomId(urlRoomId);
+      } else {
+        // 2. 如果沒有 URL 參數，才讀取上次的紀錄
+        const savedRoomId = localStorage.getItem('xmas_last_room_id');
+        if (savedRoomId) setRoomId(savedRoomId);
+      }
     }
   }, [user]);
 
@@ -464,8 +485,14 @@ const App = () => {
     }
   };
 
+  // 修改：複製連結時帶入 room 參數
   const copyInvite = () => {
-    const inviteText = `🎄 交換禮物派對！\n連結：${window.location.href}\n代碼：${roomId}`;
+    // 建立包含參數的 URL
+    const url = new URL(window.location.href);
+    url.searchParams.set('room', roomId);
+
+    const inviteText = `🎄 交換禮物派對！\n點擊連結自動加入：${url.toString()}\n房間代碼：${roomId}`;
+
     const textArea = document.createElement("textarea");
     textArea.value = inviteText;
     textArea.style.position = "fixed";
@@ -475,7 +502,7 @@ const App = () => {
     textArea.select();
     try {
       document.execCommand('copy');
-      showToast("✅ 邀請已複製！");
+      showToast("✅ 邀請已複製！(含自動連結)");
     } catch (err) {
       showToast("複製失敗，請手動複製");
     }
@@ -773,6 +800,10 @@ const App = () => {
         {/* --- 階段 1: 等待大廳 (Entry) --- */}
         {roomData.phase === 'entry' && (
           <div className="animate-fade-in space-y-8">
+            <PhaseInstruction
+              title="準備開始"
+              text="等待所有人加入房間後，主持人將開始遊戲。接下來會依序進行：禮物登錄 -> 規則制定 -> 懲罰制定 -> 遊戲交換 -> 評分 -> 結算。"
+            />
             <Card className="text-center py-16 border-t-4 border-t-emerald-500">
               <div className="flex justify-center mb-4">
                 <Trees className="text-emerald-500 animate-pulse" size={48} />
@@ -808,6 +839,10 @@ const App = () => {
         {/* --- 階段 1.5: 禮物登錄 (Gift Entry) --- */}
         {roomData.phase === 'gift-entry' && (
           <div className="animate-fade-in space-y-8">
+            <PhaseInstruction
+              title="步驟 1：登錄禮物"
+              text="請描述你帶來的禮物外觀特徵（例如：紅色紙袋、很重），讓大家知道這是誰的禮物。系統已分配你的專屬代號，交換時請認明代號。"
+            />
             {/* 顯示我的號碼卡片 */}
             {myNumber && (
               <div className="bg-amber-500/10 border border-amber-500/30 p-6 rounded-2xl text-center shadow-[0_0_30px_rgba(245,158,11,0.1)] animate-fade-in-up">
@@ -849,6 +884,10 @@ const App = () => {
         {/* --- 階段 2: 撰寫規則 --- */}
         {roomData.phase === 'rule-entry' && (
           <div className="animate-fade-in space-y-8">
+            <PhaseInstruction
+              title="步驟 2：制定規則"
+              text="發揮創意！寫下一個「交換指令」（例如：所有單數號碼向右移動），系統將會隨機排序並執行大家寫的指令。"
+            />
             <Card>
               <h2 className="text-2xl font-bold text-center mb-2 flex items-center justify-center gap-2">
                 <Edit3 className="text-amber-400" size={28} /> 你的交換指令
@@ -885,6 +924,10 @@ const App = () => {
         {/* --- 階段 2.5: 撰寫懲罰 (Punishment Entry) --- */}
         {roomData.phase === 'punishment-entry' && (
           <div className="animate-fade-in space-y-8">
+            <PhaseInstruction
+              title="步驟 3：制定懲罰"
+              text="寫下一個殘酷（或有趣）的懲罰內容。最後收到最雷禮物的人（雷王），將會從大家的點子中抽出一個來執行！"
+            />
             <Card>
               <h2 className="text-2xl font-bold text-center mb-2 flex items-center justify-center gap-2">
                 <Bomb className="text-rose-500" size={28} /> 你的懲罰點子
@@ -920,7 +963,13 @@ const App = () => {
 
         {/* --- 階段 3: 遊戲進行 --- */}
         {roomData.phase === 'game-playing' && (
-          <div className="animate-fade-in py-10 flex flex-col items-center">
+          <div className="animate-fade-in py-2 flex flex-col items-center">
+            <div className="w-full">
+              <PhaseInstruction
+                title="步驟 4：交換環節"
+                text="請看主持人或大螢幕！所有人依照畫面上的指令進行動作，直到所有指令執行完畢。"
+              />
+            </div>
             <div className="text-slate-400 mb-8 text-center w-full px-4">
               <div className="flex justify-between text-sm mb-3 px-1 font-bold tracking-widest uppercase">
                 <span>Round {roomData.currentRuleIndex + 1}</span>
@@ -956,6 +1005,10 @@ const App = () => {
         {/* --- 階段 5: 投票審判 --- */}
         {roomData.phase === 'voting' && (
           <div className="animate-fade-in space-y-6 pb-24">
+            <PhaseInstruction
+              title="步驟 5：評分審判"
+              text="交換結束！請拆開你手中的禮物，並針對「送禮者」給予雷度評分。1分 = 很讚，10分 = 雷到爆。"
+            />
             {/* 狀態提示 */}
             {roomData.votingStatus && roomData.votingStatus[user.uid] ? (
               <Card className="text-center py-12 border-t-4 border-t-emerald-500">
@@ -1022,6 +1075,10 @@ const App = () => {
         {/* --- 階段 6: 最終結果 (Leaderboard) --- */}
         {roomData.phase === 'result' && (
           <div className="animate-fade-in space-y-8 pb-20">
+            <PhaseInstruction
+              title="最終結果：雷王誕生"
+              text="這是大家的雷度總分排行榜，所有人的分數都在這裡。分數最高者即為今日雷王！"
+            />
             {/* 跑馬燈預告 */}
             <div className="bg-amber-500/20 text-amber-300 py-2 text-center text-sm font-bold border-y border-amber-500/30 animate-pulse">
               ⚠️ 下一階段：命運大輪盤！準備抽出懲罰...
@@ -1034,13 +1091,10 @@ const App = () => {
               <p className="text-slate-400 text-lg">恭喜以下得主獲得大家的怨念</p>
             </div>
 
-            {/* 使用 Snapshot 資料 (finalResults) 渲染，處理並列第一 */}
+            {/* 使用 Snapshot 資料 (finalResults) 渲染，移除前三名限制 */}
             {(roomData.finalResults || []).sort((a, b) => b.totalScore - a.totalScore).map((item, idx, arr) => {
               const isTie = idx > 0 && item.totalScore === arr[idx - 1].totalScore;
               const isFirst = item.totalScore === arr[0].totalScore;
-
-              // 只顯示前三名，但如果有並列第三也要顯示
-              if (idx >= 3 && !isFirst && item.totalScore !== arr[2].totalScore) return null;
 
               return (
                 <div key={item.uid} className={`relative rounded-3xl p-6 shadow-xl flex items-center gap-5 border ${isFirst ? 'bg-gradient-to-r from-amber-900/80 to-slate-900 border-amber-500 transform scale-105 z-10' : 'bg-slate-800/80 border-slate-700'}`}>
@@ -1072,6 +1126,10 @@ const App = () => {
         {roomData.phase === 'punishment-reveal' && (
           // 修改處：移除 justify-center，改用 pt-28 來控制上方距離
           <div className="animate-fade-in flex flex-col h-full w-full max-w-md mx-auto relative overflow-hidden pt-28 px-6">
+            <PhaseInstruction
+              title="懲罰執行"
+              text="命運的時刻！系統將從大家稍早輸入的懲罰池中，抽出一個給雷王執行。"
+            />
 
             {/* 1. 雷王資訊 (與下方看板貼近) */}
             {(() => {

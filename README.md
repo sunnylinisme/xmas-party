@@ -1,16 +1,157 @@
-# React + Vite
+🎄 聖誕交換禮物派對 (Xmas Gift Exchange Party)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+這是一個專為聚會設計的即時互動網頁應用程式 (Web App)，讓交換禮物過程變得刺激又混亂！
+結合了 指令卡牌、即時投票 與 懲罰輪盤，解決傳統抽籤的無聊，讓所有人都有參與感。
 
-Currently, two official plugins are available:
+✨ 特色功能
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+⚡️ 即時連線：所有人的手機畫面同步，主持人控制流程，無延遲感。
 
-## React Compiler
+🔗 邀請連結自動帶入：發送連結給朋友，點擊後自動填入房間號碼，無需手動輸入。
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+🎁 數位指令卡：每個人都可以出一張「交換指令」（例如：跟你右邊的人換），由系統隨機排序執行。
 
-## Expanding the ESLint configuration
+🗳️ 匿名評分系統：遊戲結束後，大家對禮物進行「雷度評分」，即時計算總分。
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+☠️ 懲罰大輪盤：分數最高的「雷王」將接受命運的審判（由大家集思廣益的懲罰庫抽出）。
+
+📱 遊戲流程說明
+
+為了確保所有參與者都能順利進行，請參考以下流程：
+
+1️⃣ 進入大廳 (Lobby)
+
+主持人：輸入一個好記的數字（如 8888）作為房間代碼，輸入名字後進入。
+
+參加者：
+
+點擊主持人分享的連結（會自動帶入代碼）。
+
+或是手動輸入代碼與名字。
+
+等待所有人都出現在列表後，主持人點擊「下一步」。
+
+2️⃣ 登錄禮物 (Gift Entry)
+
+系統會隨機分配每人一個 號碼 (No. X)，請記住這個號碼，交換時會用到。
+
+每個人輸入自己帶來的禮物描述（例如：「一個很重的馬克杯」）。
+
+輸入完畢點擊送出，這時候還看不到別人的禮物。
+
+3️⃣ 輸入指令 (Rule Entry)
+
+這是遊戲最精華的部分！每個人要貢獻一個交換禮物的規則。
+
+範例：
+
+「所有人往右傳給 +1 號」
+
+「拿著禮物跟主持人交換」
+
+「單數號的人起立，向左移動兩格」
+
+如果你想不到，可以點擊「隨機靈感」按鈕，系統會幫你出題。
+
+4️⃣ 輸入懲罰 (Punishment Entry)
+
+為了懲罰最後送出最爛禮物的人，每個人都要貢獻一個懲罰點子。
+
+範例：
+
+「用屁股寫字」
+
+「請全場喝飲料」
+
+這些懲罰會進入「懲罰池」，最後只會抽出一個執行。
+
+5️⃣ 遊戲進行 (Game Playing)
+
+系統會將大家寫的指令 隨機洗牌。
+
+主持人按下「下一條指令」，畫面上會顯示巨大的指令卡。
+
+所有人依照指令動作（例如交換手中的禮物）。
+
+重複此步驟，直到所有人的指令都執行完畢。
+
+6️⃣ 審判時刻 (Voting)
+
+此時大家手中都有一個最終禮物。
+
+請拆開禮物，並在手機上對 送禮物的人 進行評分。
+
+評分標準：分數越高代表禮物越「雷」（爛）。
+
+1 分 = 天使禮物
+
+10 分 = 雷到爆炸
+
+評分是匿名的，請誠實作答。
+
+7️⃣ 結果揭曉 (Result)
+
+系統會統計總分，並顯示排行榜。
+
+第一名（分數最高者）就是今天的 「雷王」 👑。
+
+8️⃣ 懲罰輪盤 (Punishment)
+
+雷王誕生後，進入懲罰環節。
+
+畫面上出現老虎機，主持人按下按鈕，從大家剛剛輸入的懲罰中抽出一個。
+
+雷王執行懲罰，遊戲結束！
+
+🛠️ 技術與安裝說明
+
+本專案使用 React + Firebase 構建。
+
+環境需求
+
+Node.js (v16+)
+
+npm 或 yarn
+
+安裝步驟
+
+下載專案
+
+git clone [your-repo-link]
+cd xmas-party
+
+
+安裝依賴
+
+npm install
+# 或
+yarn install
+
+
+設定 Firebase
+
+打開 src/App.jsx。
+
+找到 firebaseConfig 物件。
+
+填入你自己 Firebase Project 的設定值（需開啟 Firestore 與 Auth 匿名登入功能）。
+
+啟動開發伺服器
+
+npm run dev
+
+
+部署 (Optional)
+推薦使用 Vercel 或 Firebase Hosting 進行部署。
+
+⚠️ 常見問題
+
+Q: 為什麼連結點進去沒有自動填入房間號？
+
+A: 請確認複製的連結格式是否為 .../?room=1234。請務必使用大廳頁面的「複製邀請連結」按鈕，不要直接複製瀏覽器網址列（除非網址列已經有參數）。
+
+Q: 有人斷線怎麼辦？
+
+A: 只要重新輸入相同的房間代碼與名字，就可以回到原本的狀態。
+
+祝大家聖誕快樂！ Merry Christmas! 🎄
