@@ -841,7 +841,7 @@ const App = () => {
           <div className="animate-fade-in space-y-8">
             <PhaseInstruction
               title="步驟 1：登錄禮物"
-              text="請描述你帶來的禮物外觀特徵（例如：紅色紙袋、很重），讓大家知道這是誰的禮物。系統已分配你的專屬代號，交換時請認明代號。"
+              text="請直接填寫「禮物內容物」（例如：星巴克馬克杯、藍芽耳機），這樣等一下大家評分時才知道你的禮物是什麼！系統已分配你的專屬代號，交換時請認明代號。"
             />
             {/* 顯示我的號碼卡片 */}
             {myNumber && (
@@ -858,12 +858,12 @@ const App = () => {
               <h2 className="text-2xl font-bold text-center mb-2 flex items-center justify-center gap-2">
                 <Gift className="text-rose-400" size={28} /> 你的禮物是？
               </h2>
-              <p className="text-sm text-slate-400 text-center mb-8">請簡單描述你帶來的禮物（其他人暫時看不到）</p>
+              <p className="text-sm text-slate-400 text-center mb-8">請清楚寫下你的禮物是什麼（其他人暫時看不到）</p>
 
               <div className="mb-6">
                 <textarea
                   className="w-full p-5 bg-slate-800/50 border border-slate-600 rounded-2xl focus:border-rose-500 outline-none resize-none text-xl text-white placeholder-slate-600 min-h-[120px]"
-                  placeholder="例：一個很重的馬克杯..."
+                  placeholder="例：星巴克聖誕限定馬克杯、7-11 禮物卡 500 元..."
                   value={myGiftDescription}
                   onChange={e => setMyGiftDescription(e.target.value)}
                   disabled={roomData.gifts && roomData.gifts[user.uid]}
