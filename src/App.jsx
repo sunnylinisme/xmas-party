@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, memo, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, doc, onSnapshot, setDoc, updateDoc, getDoc, deleteDoc, deleteField, increment } from 'firebase/firestore';
-import { Gift, Users, ArrowRight, Zap, Skull, Play, Edit3, AlertTriangle, LogIn, Share2, Link as LinkIcon, RotateCcw, Shuffle, Star, Save, X, LogOut, Info, CheckCircle, Clock, Bomb, Hash, Lightbulb, Ticket, Trees, Snowflake, ChevronDown } from 'lucide-react';
+import { Gift, Users, ArrowRight, Zap, Skull, Play, Edit3, AlertTriangle, LogIn, Share2, Link as LinkIcon, RotateCcw, Shuffle, Star, Save, X, LogOut, Info, CheckCircle, Clock, Bomb, Hash, Lightbulb, Ticket, Trees, Snowflake, ChevronDown, PackageOpen } from 'lucide-react';
 
 // ==========================================
 // ⚠️ 你的 Firebase 設定
@@ -619,7 +619,8 @@ const App = () => {
     if (roomData.currentRuleIndex < roomData.rules.length - 1) {
       await updateRoom({ currentRuleIndex: increment(1) });
     } else {
-      nextPhase('voting');
+      // 修改：指令結束後，進入拆禮物階段
+      nextPhase('gift-opening');
     }
   };
 
@@ -1013,10 +1014,56 @@ const App = () => {
             {isHost && (
               <div className="mt-10 w-full">
                 <Button onClick={nextRule} size="lg" className="w-full text-2xl py-6 shadow-[0_0_25px_rgba(225,29,72,0.4)]">
-                  {roomData.currentRuleIndex < roomData.rules.length - 1 ? "下一條指令 ➔" : "遊戲結束，進入投票 🏁"}
+                  {roomData.currentRuleIndex < roomData.rules.length - 1 ? "下一條指令 ➔" : "遊戲結束，準備拆禮物 🎁"}
                 </Button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* --- 新增階段 4.5: 拆禮物時間 --- */}
+        {roomData.phase === 'gift-opening' && (
+          <div className="animate-fade-in flex flex-col items-center justify-center min-h-[50vh] text-center">
+            <PhaseInstruction
+              title="步驟 4.5：拆禮物時間"
+              text="指令已全數執行完畢！現在請大家動手拆開手中的禮物，看看獲得了什麼驚喜（或驚嚇）！"
+            />
+
+            <Card className="w-full py-16 px-6 border-t-4 border-t-amber-500 flex flex-col items-center">
+              <div className="relative mb-8">
+                <div className="absolute inset-0 bg-amber-500/30 blur-2xl rounded-full animate-pulse"></div>
+                <Gift size={80} className="text-amber-400 animate-bounce relative z-10" />
+              </div>
+
+              <h2 className="text-3xl md:text-4xl font-black text-white mb-4 drop-shadow-lg">
+                請拆開手中的禮物！
+              </h2>
+
+              <div className="bg-rose-900/40 border border-rose-500/30 rounded-xl p-6 max-w-lg w-full mb-8">
+                <h3 className="text-rose-300 font-bold mb-2 flex items-center justify-center gap-2">
+                  <AlertTriangle size={20} /> 重要提醒
+                </h3>
+                <p className="text-white/90 text-lg leading-relaxed">
+                  請務必確認這份禮物是<br />
+                  <span className="text-amber-400 font-black text-2xl mx-1">「誰送的」</span><br />
+                  稍後需要針對「送禮者」進行評分喔！
+                </p>
+              </div>
+
+              {isHost ? (
+                <div className="w-full max-w-md">
+                  <p className="text-slate-400 text-sm mb-4">確認大家都拆完禮物了嗎？</p>
+                  <Button onClick={() => nextPhase('voting')} size="lg" className="w-full text-xl py-5 shadow-[0_0_20px_rgba(16,185,129,0.4)]" variant="secondary">
+                    大家都拆完了！進入評分 ➔
+                  </Button>
+                </div>
+              ) : (
+                <div className="animate-pulse flex flex-col items-center gap-2 text-slate-400">
+                  <Clock size={20} />
+                  <span>等待主持人進入評分階段...</span>
+                </div>
+              )}
+            </Card>
           </div>
         )}
 
