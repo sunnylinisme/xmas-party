@@ -101,6 +101,49 @@ const PunishmentSlotMachine = ({ text, isSpinning, hasResult }) => {
   );
 };
 
+// --- 拆禮物互動元件 ---
+const GiftReveal = () => {
+  const [opened, setOpened] = useState(false);
+
+  return (
+    <div className="flex flex-col items-center justify-center mb-8 w-full cursor-pointer group" onClick={() => setOpened(true)}>
+      <h2 className={`text-3xl md:text-4xl font-black mb-8 drop-shadow-lg transition-colors duration-300 ${opened ? 'text-amber-300' : 'text-white'}`}>
+        {opened ? "✨ Surprise! ✨" : "請拆開手中的禮物吧！"}
+      </h2>
+
+      <div className={`relative transition-transform duration-500 ${opened ? 'scale-110' : 'group-hover:scale-105 active:scale-95'}`}>
+        {opened ? (
+          <>
+            <div className="absolute inset-0 bg-amber-500/40 blur-3xl rounded-full animate-pulse"></div>
+            <PackageOpen size={140} className="text-amber-400 relative z-10 animate-fade-in-up drop-shadow-[0_0_20px_rgba(251,191,36,0.6)]" />
+          </>
+        ) : (
+          <>
+            <div className="absolute inset-0 bg-rose-500/20 blur-2xl rounded-full animate-pulse"></div>
+            <Gift size={120} className="text-rose-400 relative z-10 animate-shake drop-shadow-2xl" />
+          </>
+        )}
+      </div>
+
+      {/* 提示文字區域 */}
+      <div className="mt-8 h-24 flex flex-col items-center justify-center transition-all duration-500">
+        {opened ? (
+          <div className="animate-fade-in text-center bg-slate-800/60 p-4 rounded-xl border border-amber-500/30 backdrop-blur-sm">
+            <p className="text-amber-200 text-lg font-bold mb-1 flex items-center justify-center gap-2">
+              <Lightbulb size={18} className="text-amber-400" /> 別忘了確認是誰送的！
+            </p>
+            <p className="text-slate-400 text-sm">記住送禮者的名字，等一下要評分喔～</p>
+          </div>
+        ) : (
+          <p className="text-slate-500 text-sm animate-pulse flex items-center gap-2 bg-slate-900/40 px-4 py-2 rounded-full">
+            <Play size={12} /> 點擊禮物盒來打開
+          </p>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // --- 獨立的雪花背景元件 (修正版：全螢幕 Fixed + Reroll X Position) ---
 const SnowBackground = memo(() => {
   const canvasRef = useRef(null);
@@ -1030,25 +1073,8 @@ const App = () => {
             />
 
             <Card className="w-full py-16 px-6 border-t-4 border-t-amber-500 flex flex-col items-center">
-              <div className="relative mb-8">
-                <div className="absolute inset-0 bg-amber-500/30 blur-2xl rounded-full animate-pulse"></div>
-                <Gift size={80} className="text-amber-400 animate-bounce relative z-10" />
-              </div>
-
-              <h2 className="text-3xl md:text-4xl font-black text-white mb-4 drop-shadow-lg">
-                請拆開手中的禮物！
-              </h2>
-
-              <div className="bg-rose-900/40 border border-rose-500/30 rounded-xl p-6 max-w-lg w-full mb-8">
-                <h3 className="text-rose-300 font-bold mb-2 flex items-center justify-center gap-2">
-                  <AlertTriangle size={20} /> 重要提醒
-                </h3>
-                <p className="text-white/90 text-lg leading-relaxed">
-                  請務必確認這份禮物是<br />
-                  <span className="text-amber-400 font-black text-2xl mx-1">「誰送的」</span><br />
-                  稍後需要針對「送禮者」進行評分喔！
-                </p>
-              </div>
+              {/* 替換為拆禮物動畫元件 */}
+              <GiftReveal />
 
               {isHost ? (
                 <div className="w-full max-w-md">
@@ -1266,9 +1292,11 @@ const App = () => {
         @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } 
         @keyframes fade-in-down { from { opacity: 0; transform: translateY(-20px) translateX(-50%); } to { opacity: 1; transform: translateY(0) translateX(-50%); } }
         @keyframes scan { 0% { left: -100%; } 100% { left: 100%; } }
+        @keyframes shake { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
         .animate-scan { animation: scan 1.5s linear infinite; }
         .animate-fade-in { animation: fade-in 0.5s ease-out forwards; } 
         .animate-fade-in-down { animation: fade-in-down 0.5s ease-out forwards; }
+        .animate-shake { animation: shake 2s ease-in-out infinite; }
         .no-scrollbar::-webkit-scrollbar { display: none; } 
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
